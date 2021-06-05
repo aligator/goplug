@@ -13,8 +13,6 @@ import (
 	"strings"
 )
 
-type event string
-
 type plugin struct {
 	*exec.Cmd
 	id        string

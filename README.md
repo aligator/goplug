@@ -1,6 +1,6 @@
 # GoPlug
 
-A simple Go plugin mechanism which just relies on starting plugins as
+A simple (currently POC only) Go plugin mechanism which just relies on starting plugins as
 child processes and communicates with them over stdin / stdout.
 
 ## Run example
