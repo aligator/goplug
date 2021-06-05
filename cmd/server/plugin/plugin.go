@@ -1,6 +1,6 @@
 package plugin
 
-import "goplug"
+import "github.com/aligator/goplug"
 
 // TestPlugin defines the methods which can be used by plugins.
 type TestPlugin struct {

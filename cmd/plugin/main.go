@@ -1,7 +1,7 @@
 package main
 
 import (
-	"goplug/cmd/server/plugin"
+	"github.com/aligator/goplug/cmd/server/plugin"
 	"time"
 )
 

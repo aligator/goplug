@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"goplug"
+	"github.com/aligator/goplug"
 )
 
 func main() {
