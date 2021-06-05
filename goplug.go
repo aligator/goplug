@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"io/ioutil"
+	"log"
 	"os/exec"
 	"path"
 	"strings"
@@ -15,7 +17,8 @@ type event string
 
 type plugin struct {
 	*exec.Cmd
-	id string
+	id        string
+	stdinPipe io.WriteCloser
 }
 
 type GoPlug struct {
@@ -30,9 +33,23 @@ func isValidPlugin(info fs.FileInfo) bool {
 		return false
 	}
 
+	if info.Name() == ".gitkeep" {
+		return false
+	}
+
 	// ToDo: implement checks
 
 	return true
+}
+
+func parseMessage(message string) (string, []byte, error) {
+	// Commands always consist of one command name and json separated by an ' '.
+	split := strings.SplitN(message, " ", 2)
+	if len(split) != 2 {
+		return "", nil, errors.New("invalid message")
+	}
+
+	return split[0], []byte(split[1]), nil
 }
 
 func (g *GoPlug) RegisterOnCommand(listener func(cmd string, data []byte) error) {
@@ -41,25 +58,36 @@ func (g *GoPlug) RegisterOnCommand(listener func(cmd string, data []byte) error)
 
 func (g *GoPlug) onMessage(p *plugin) func(message []byte) {
 	return func(message []byte) {
-		// Commands always consist of one command name and json separated by an ' '.
-		split := strings.SplitN(string(message), " ", 2)
-		if len(split) != 2 {
-			fmt.Println(errors.New("invalid message"))
+		cmd, data, err := parseMessage(string(message))
+		if err != nil {
+			fmt.Println(err)
 			return
 		}
 
 		// First handle GoPlug specific messages.
 
+		if cmd == "log" {
+			var logMessage string
+			err := json.Unmarshal(data, &logMessage)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			log.Println(logMessage)
+			return
+		}
+
 		// If id is not set yet, the first message must be
 		// a "register" command containing the id.
 		if p.id == "" {
-			if split[0] != "register" {
+			if cmd != "register" {
 				fmt.Println(errors.New("the first message has to be a 'register' command"))
 				return
 			}
 
 			registerMessage := &RegisterMessage{}
-			err := json.Unmarshal([]byte(split[1]), registerMessage)
+			err := json.Unmarshal([]byte(data), registerMessage)
 			if err != nil {
 				fmt.Println(err)
 				return
@@ -71,7 +99,7 @@ func (g *GoPlug) onMessage(p *plugin) func(message []byte) {
 
 		// All other messages are forwarded to all listeners
 		for _, listener := range g.onCommandListener {
-			err := listener(split[0], []byte(split[1]))
+			err := listener(cmd, data)
 			if err != nil {
 				fmt.Println(err)
 				continue
@@ -100,6 +128,11 @@ func (g *GoPlug) Run() error {
 			},
 		}
 
+		p.stdinPipe, err = p.StdinPipe()
+		if err != nil {
+			return err
+		}
+
 		p.Stdout = writer{
 			onMessage: g.onMessage(&p),
 		}
@@ -108,15 +141,50 @@ func (g *GoPlug) Run() error {
 
 		err = p.Start()
 		if err != nil {
-			return err
+			fmt.Println(err)
+			continue
 		}
 	}
 
 	return nil
 }
 
-func (g *GoPlug) Wait() {
-	for _, p := range g.processes {
-		p.Wait()
+func (g *GoPlug) SendAll(cmd string, message interface{}) error {
+	var data []byte
+
+	if message != nil {
+		var err error
+		data, err = json.Marshal(message)
+		if err != nil {
+			return err
+		}
 	}
+
+	for _, p := range g.processes {
+		_, err := p.stdinPipe.Write([]byte(cmd + " " + string(data) + "\n"))
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+	}
+
+	return nil
+}
+
+func (g *GoPlug) Wait() error {
+	err := g.SendAll("close", nil)
+	if err != nil {
+		return err
+	}
+
+	for _, p := range g.processes {
+		err := p.Wait()
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+
+		p.stdinPipe.Close()
+	}
+	return nil
 }

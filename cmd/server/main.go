@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/aligator/goplug"
+	"github.com/aligator/goplug/cmd/server/plugin"
 )
 
 func main() {
@@ -29,6 +30,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	plug.SendAll("doPrint", plugin.DoPrintMessage{
+		Text: "HELLOOOOOOOO",
+	})
 
 	plug.Wait()
 }
