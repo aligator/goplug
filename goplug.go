@@ -52,8 +52,20 @@ func parseMessage(message string) (string, []byte, error) {
 	return split[0], []byte(split[1]), nil
 }
 
-func (g *GoPlug) RegisterOnCommand(listener func(cmd string, data []byte) error) {
-	g.onCommandListener = append(g.onCommandListener, listener)
+func (g *GoPlug) RegisterOnCommand(registerCmd string, factory func() interface{}, listener func(message interface{}) error) {
+	g.onCommandListener = append(g.onCommandListener, func(cmd string, message []byte) error {
+		if cmd != registerCmd {
+			return nil
+		}
+
+		data := factory()
+		err := json.Unmarshal(message, &data)
+		if err != nil {
+			return err
+		}
+
+		return listener(data)
+	})
 }
 
 func (g *GoPlug) onMessage(p *plugin) func(message []byte) {

@@ -1,28 +1,24 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/aligator/goplug"
 	"github.com/aligator/goplug/cmd/server/plugin"
 )
+
+func newString() interface{} {
+	var s string
+	return &s
+}
 
 func main() {
 	plug := goplug.GoPlug{
 		PluginFolder: "./cmd/plugin-bin",
 	}
 
-	plug.RegisterOnCommand(func(cmd string, data []byte) error {
-		if cmd == "print" {
-			message := ""
-			err := json.Unmarshal(data, &message)
-			if err != nil {
-				return err
-			}
-
-			fmt.Println(message)
-		}
-
+	plug.RegisterOnCommand("print", newString, func(message interface{}) error {
+		text := message.(*string)
+		fmt.Println(*text)
 		return nil
 	})
 
