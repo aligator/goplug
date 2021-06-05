@@ -35,11 +35,30 @@ func (p *Plugin) Log(message string) error {
 	return p.Send("log", message)
 }
 
-func (p *Plugin) RegisterCommand(cmd string, listener func(message []byte) error) {
+// RegisterCommand can be used to register commands, this plugin listens to.
+// The cmd should be a unique string.
+//
+// The factory is used to create a new instance of whatever the message should be parsed to (using json.Unmarshal).
+// It has to return a pointer.
+//
+// listener is the actual function to call when the command occurs. The message is already parsed from json and you can
+// safely assume that it is of the type, the factory returns. So you can safely convert and use it like this:
+//  data := message.(*DoPrintMessage)
+//	return listener(data.Text)
+func (p *Plugin) RegisterCommand(cmd string, factory func() interface{}, listener func(message interface{}) error) {
 	if p.commands == nil {
 		p.commands = make(map[string]func(data []byte) error)
 	}
-	p.commands[cmd] = listener
+
+	p.commands[cmd] = func(message []byte) error {
+		data := factory()
+		err := json.Unmarshal(message, &data)
+		if err != nil {
+			return err
+		}
+
+		return listener(data)
+	}
 }
 
 func (p *Plugin) Run() error {

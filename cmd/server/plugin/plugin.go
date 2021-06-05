@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"encoding/json"
 	"github.com/aligator/goplug"
 )
 
@@ -9,19 +8,18 @@ type DoPrintMessage struct {
 	Text string `json:"text"`
 }
 
+func newDoPrintMessage() interface{} {
+	return &DoPrintMessage{}
+}
+
 // TestPlugin defines the methods which can be used by plugins.
 type TestPlugin struct {
 	goplug.Plugin
 }
 
-func (p *TestPlugin) OnDoPrint(listener func(toPrint string) error) {
-	p.RegisterCommand("doPrint", func(message []byte) error {
-		data := DoPrintMessage{}
-		err := json.Unmarshal(message, &data)
-		if err != nil {
-			return err
-		}
-
+func (p *TestPlugin) OnDoPrint(listener func(messageToPrint string) error) {
+	p.RegisterCommand("doPrint", newDoPrintMessage, func(message interface{}) error {
+		data := message.(*DoPrintMessage)
 		return listener(data.Text)
 	})
 }
