@@ -75,7 +75,6 @@ func (p *Plugin) Run() error {
 		}
 
 		if cmd == "close" {
-			p.Log("do close")
 			break
 		}
 
@@ -84,7 +83,6 @@ func (p *Plugin) Run() error {
 		}
 
 		if listener, ok := p.commands[cmd]; ok {
-			p.Log(fmt.Sprint(data))
 			err := listener(data)
 			if err != nil {
 				return err
