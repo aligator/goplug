@@ -17,6 +17,14 @@ type TestPlugin struct {
 	goplug.Plugin
 }
 
+func New(ID string) TestPlugin {
+	return TestPlugin{
+		Plugin: goplug.Plugin{
+			ID: ID,
+		},
+	}
+}
+
 func (p *TestPlugin) OnDoPrint(listener func(messageToPrint string) error) {
 	p.RegisterCommand("doPrint", newDoPrintMessage, func(message interface{}) error {
 		data := message.(*DoPrintMessage)

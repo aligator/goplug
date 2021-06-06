@@ -4,6 +4,7 @@ import (
 	"bytes"
 )
 
+// writer is just calls onMessage for each line (separated by \n).
 type writer struct {
 	onMessage func(message []byte)
 }

@@ -7,16 +7,21 @@ import (
 )
 
 func main() {
-	p := plugin.TestPlugin{}
-	p.Register("SlowPrintPlugin")
+	p := plugin.New("SlowPrintPlugin")
+	err := p.Register()
+	if err != nil {
+		panic(err)
+	}
+
+	logger := p.Logger()
 	p.OnDoPrint(func(toPrint string) error {
-		p.Log("start doPrint")
+		logger.Println("start doPrint")
 		time.Sleep(2 * time.Second)
 		return p.Print("This is the SlowPrintPlugin " + toPrint)
 	})
 
-	err := p.Run()
+	err = p.Run()
 	if err != nil {
-		p.Log(fmt.Sprint(err))
+		logger.Println(fmt.Sprint(err))
 	}
 }

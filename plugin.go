@@ -4,45 +4,68 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 )
 
+// RegisterMessage is the message which is the
+// payload for the 'register' command.
 type RegisterMessage struct {
 	ID string `json:"id"`
 }
 
+// Plugin is the base struct to be used to build plugins.
+// It already contains the basic methods to communicate with
+// the plugin-host.
 type Plugin struct {
 	ID       string
 	commands map[string]func(data []byte) error
 }
 
-func (p *Plugin) Register(ID string) error {
+// Register registers the plugin with the given ID.
+// This ID has to be unique. If there is already another plugin
+// registered with the same id, the registration will fail and the
+// plugin process killed.
+//
+// Register has to be the first message sent by any plugin.
+func (p *Plugin) Register() error {
 	return p.Send("register", RegisterMessage{
-		ID: ID,
+		ID: p.ID,
 	})
 }
 
+// Send any command with any json-marshal-able payload.
 func (p *Plugin) Send(cmd string, payload interface{}) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	fmt.Println(cmd, string(data))
-	return nil
+	// As GoPlug communicates over stdout, a simple fmt.Println is sufficient.
+	_, err = fmt.Println(cmd, string(data))
+	return err
 }
 
-func (p *Plugin) Log(message string) error {
-	return p.Send("log", message)
+// Logger returns a new log.Logger configured to log through
+// the plugin messaging system. This is needed stdout is already
+// used for communication. When logging using this logger, the logs are
+// sent using the 'log' command.
+func (p *Plugin) Logger() *log.Logger {
+	return log.New(&PluginLogWriter{
+		Plugin: p,
+	}, p.ID+" ", 0)
 }
 
 // RegisterCommand can be used to register commands, this plugin listens to.
 // The cmd should be a unique string.
 //
-// The factory is used to create a new instance of whatever the message should be parsed to (using json.Unmarshal).
+// The factory is used to create a new instance of whatever the message should
+// be parsed to (using json.Unmarshal).
 // It has to return a pointer.
 //
-// listener is the actual function to call when the command occurs. The message is already parsed from json and you can
-// safely assume that it is of the type, the factory returns. So you can safely convert and use it like this:
+// listener is the actual function to call when the command occurs.
+// The message is already parsed from json and you can
+// safely assume that it is of the type, the factory returns.
+// So you can safely convert and use it like this:
 //  data := message.(*DoPrintMessage)
 //	return listener(data.Text)
 func (p *Plugin) RegisterCommand(cmd string, factory func() interface{}, listener func(message interface{}) error) {
@@ -61,6 +84,9 @@ func (p *Plugin) RegisterCommand(cmd string, factory func() interface{}, listene
 	}
 }
 
+// Run starts the message-reading loop.
+// You have to setup all events before calling this method.
+// This function only exits on error of if the 'close' command was received.
 func (p *Plugin) Run() error {
 	reader := bufio.NewReader(os.Stdin)
 	for {

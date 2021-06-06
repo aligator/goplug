@@ -27,9 +27,15 @@ func main() {
 		panic(err)
 	}
 
-	plug.SendAll("doPrint", plugin.DoPrintMessage{
+	err = plug.Send("doPrint", plugin.DoPrintMessage{
 		Text: "HELLOOOOOOOO",
 	})
+	if err != nil {
+		panic(err)
+	}
 
-	plug.Wait()
+	err = plug.Close()
+	if err != nil {
+		panic(err)
+	}
 }
