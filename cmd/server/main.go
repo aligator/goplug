@@ -16,7 +16,7 @@ func main() {
 		PluginFolder: "./cmd/plugin-bin",
 	}
 
-	plug.RegisterOnCommand("print", newString, func(message interface{}) error {
+	plug.RegisterOnCommand("print", newString, func(p goplug.PluginInfo, message interface{}) error {
 		text := message.(*string)
 		fmt.Println(*text)
 		return nil

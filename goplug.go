@@ -10,13 +10,16 @@ import (
 	"path"
 )
 
+type PluginInfo struct {
+	// ID is set on the first message sent from the plugin during registration.
+	// it identifies the plugin uniquely.
+	ID string
+}
+
 // plugin is the internal representation of a plugin binary.
 type plugin struct {
+	PluginInfo
 	*exec.Cmd
-
-	// id is set on the first message sent from the plugin during registration.
-	// it identifies the plugin uniquely.
-	id string
 
 	// stdinPipe is the pipe to send data to the plugin.
 	stdinPipe io.WriteCloser
@@ -36,7 +39,7 @@ type GoPlug struct {
 	// registeredPlugins contains references to all plugins which already
 	// registered themselves.
 	registeredPlugins map[string]*plugin
-	onCommandListener []func(cmd string, data []byte) error
+	onCommandListener []func(p *plugin, cmd string, data []byte) error
 }
 
 func isValidPlugin(info fs.FileInfo) bool {
@@ -68,8 +71,8 @@ func isValidPlugin(info fs.FileInfo) bool {
 // So you can safely convert and use it like this:
 //  data := message.(*YourMessageType)
 //	return listener(data.Text)
-func (g *GoPlug) RegisterOnCommand(registerCmd string, factory func() interface{}, listener func(message interface{}) error) {
-	g.onCommandListener = append(g.onCommandListener, func(cmd string, message []byte) error {
+func (g *GoPlug) RegisterOnCommand(registerCmd string, factory func() interface{}, listener func(p PluginInfo, message interface{}) error) {
+	g.onCommandListener = append(g.onCommandListener, func(p *plugin, cmd string, message []byte) error {
 		if cmd != registerCmd {
 			return nil
 		}
@@ -80,7 +83,7 @@ func (g *GoPlug) RegisterOnCommand(registerCmd string, factory func() interface{
 			return err
 		}
 
-		return listener(data)
+		return listener(p.PluginInfo, data)
 	})
 }
 

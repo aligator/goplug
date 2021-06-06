@@ -46,7 +46,7 @@ func onRegister(g *GoPlug, p *plugin, data []byte) error {
 	}
 
 	// Register the plugin.
-	p.id = registerMessage.ID
+	p.ID = registerMessage.ID
 	g.registeredPlugins[registerMessage.ID] = p
 	return nil
 }
@@ -64,7 +64,7 @@ func (g *GoPlug) onMessage(p *plugin) func(message []byte) {
 
 		// If id is not set yet, the first message must be
 		// a "register" command containing the id.
-		if p.id == "" {
+		if p.ID == "" {
 			if cmd != "register" {
 				fmt.Println(errors.New("the first message has to be a 'register' command"))
 				return
@@ -88,7 +88,7 @@ func (g *GoPlug) onMessage(p *plugin) func(message []byte) {
 
 		// All other messages are forwarded to all listeners
 		for _, listener := range g.onCommandListener {
-			err := listener(cmd, data)
+			err := listener(p, cmd, data)
 			if err != nil {
 				fmt.Println(err)
 				continue
