@@ -30,6 +30,11 @@ func onLog(data []byte) error {
 	return nil
 }
 
+func onInitialized(p *plugin) error {
+	close(p.initialized)
+	return nil
+}
+
 func onRegister(g *GoPlug, p *plugin, data []byte) error {
 
 	registerMessage := &RegisterMessage{}
@@ -80,6 +85,14 @@ func (g *GoPlug) onMessage(p *plugin) func(message []byte) {
 		// log can be used to print log messages inside of a plugin.
 		if cmd == "log" {
 			err := onLog(data)
+			if err != nil {
+				fmt.Println(err)
+			}
+			return
+		}
+
+		if cmd == "initialized" {
+			err := onInitialized(p)
 			if err != nil {
 				fmt.Println(err)
 			}

@@ -22,7 +22,7 @@ func main() {
 		return nil
 	})
 
-	err := plug.Run()
+	err := plug.Init()
 	if err != nil {
 		panic(err)
 	}

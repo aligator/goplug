@@ -16,6 +16,7 @@ func (w writer) Write(p []byte) (n int, err error) {
 		if len(m) == 0 {
 			continue
 		}
+
 		w.onMessage(m)
 	}
 

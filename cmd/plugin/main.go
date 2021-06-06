@@ -15,11 +15,16 @@ func main() {
 
 	logger := p.Logger()
 	p.OnDoPrint(func(toPrint string) error {
-		logger.Println("start doPrint")
 		time.Sleep(2 * time.Second)
 		return p.Print("This is the SlowPrintPlugin " + toPrint)
 	})
 
+	p.OnAllInitialized(func() error {
+		logger.Println("All plugins initialized")
+		return nil
+	})
+
+	logger.Println("start RUN")
 	err = p.Run()
 	if err != nil {
 		logger.Println(fmt.Sprint(err))

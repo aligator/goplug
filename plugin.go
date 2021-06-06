@@ -74,6 +74,10 @@ func (p *Plugin) RegisterCommand(cmd string, factory func() interface{}, listene
 	}
 
 	p.commands[cmd] = func(message []byte) error {
+		if factory == nil {
+			return listener(nil)
+		}
+
 		data := factory()
 		err := json.Unmarshal(message, &data)
 		if err != nil {
@@ -84,10 +88,12 @@ func (p *Plugin) RegisterCommand(cmd string, factory func() interface{}, listene
 	}
 }
 
-// Run starts the message-reading loop.
+// Run marks the plugin as initialized and starts the message-reading loop.
 // You have to setup all events before calling this method.
 // This function only exits on error of if the 'close' command was received.
 func (p *Plugin) Run() error {
+	p.Send("initialized", nil)
+
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		message, _, err := reader.ReadLine()
@@ -117,4 +123,11 @@ func (p *Plugin) Run() error {
 	}
 
 	return nil
+}
+
+// OnAllInitialized is an event which notifies that all plugins are initialized.
+func (p *Plugin) OnAllInitialized(listener func() error) {
+	p.RegisterCommand("allInitialized", nil, func(message interface{}) error {
+		return listener()
+	})
 }

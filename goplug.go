@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os/exec"
 	"path"
+	"time"
 )
 
 type PluginInfo struct {
@@ -21,12 +22,15 @@ type plugin struct {
 	PluginInfo
 	*exec.Cmd
 
+	// initialized gets closed when initialized
+	initialized chan bool
+
 	// stdinPipe is the pipe to send data to the plugin.
 	stdinPipe io.WriteCloser
 }
 
 // GoPlug loads plugins from the PluginFolder.
-// Use Run to execute them.
+// Use Init to execute them.
 type GoPlug struct {
 	PluginFolder string
 
@@ -87,8 +91,9 @@ func (g *GoPlug) RegisterOnCommand(registerCmd string, factory func() interface{
 	})
 }
 
-// Run initializes and starts all plugins.
-func (g *GoPlug) Run() error {
+// Init initializes and starts all plugins.
+// It blocks until all plugins are initialized.
+func (g *GoPlug) Init() error {
 	entries, err := ioutil.ReadDir(g.PluginFolder)
 	if err != nil {
 		return err
@@ -111,6 +116,7 @@ func (g *GoPlug) Run() error {
 				//       should be started in "plugin-mode".
 				Args: []string{filePath},
 			},
+			initialized: make(chan bool),
 		}
 
 		p.stdinPipe, err = p.StdinPipe()
@@ -131,11 +137,40 @@ func (g *GoPlug) Run() error {
 		}
 	}
 
-	// ToDo: Close for all plugins to send the 'register' command and kill all
-	//       plugins which did not do so in a certain time frame.
-	//       After that send a message to all plugins, that everything is
-	//       initialized.
-	return nil
+	deadline := time.Now().Add(200 * time.Second)
+	done := make(chan bool)
+	go func() {
+		for _, p := range g.plugins {
+			var initialized bool
+
+			for {
+				select {
+				case _, ok := <-p.initialized:
+					if !ok {
+						initialized = true
+					}
+				default:
+				}
+
+				if initialized || deadline.Before(time.Now()) {
+					break
+				}
+			}
+
+			if !initialized {
+				// Process was not initialized in time.
+				p.Process.Kill()
+				if _, ok := g.registeredPlugins[p.ID]; ok {
+					delete(g.registeredPlugins, p.ID)
+				}
+			}
+		}
+		close(done)
+	}()
+
+	<-done
+
+	return g.Send("allInitialized", nil)
 }
 
 // Send a command to all plugins.
