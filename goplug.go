@@ -137,7 +137,7 @@ func (g *GoPlug) Init() error {
 		}
 	}
 
-	deadline := time.Now().Add(200 * time.Second)
+	deadline := time.Now().Add(3 * time.Second)
 	done := make(chan bool)
 	go func() {
 		for _, p := range g.plugins {
