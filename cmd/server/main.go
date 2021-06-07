@@ -5,6 +5,7 @@ import (
 	"github.com/aligator/goplug"
 	"github.com/aligator/goplug/cmd/server/plugin"
 	"math/rand"
+	"time"
 )
 
 func newString() interface{} {
@@ -30,7 +31,9 @@ func main() {
 
 	plug.RegisterOnCommand("fnRand", nil, func(p goplug.PluginInfo, message interface{}) error {
 		go func() {
-			_ = plug.Send("fnRand", rand.Int())
+			rand.Seed(time.Now().UnixNano())
+			val := rand.Intn(100)
+			_ = plug.Send("fnRand", val)
 		}()
 		return nil
 	})

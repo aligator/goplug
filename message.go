@@ -31,7 +31,7 @@ func onLog(data []byte) error {
 }
 
 func onInitialized(p *plugin) error {
-	close(p.initialized)
+	close(p.initializedSig)
 	return nil
 }
 
@@ -80,6 +80,10 @@ func (g *GoPlug) onMessage(p *plugin) func(message []byte) {
 				fmt.Println(err)
 			}
 			return
+		}
+
+		if cmd == "lastMessage" {
+			close(p.lastMessageSig)
 		}
 
 		// log can be used to print log messages inside of a plugin.

@@ -14,14 +14,16 @@ func main() {
 
 	logger := p.Logger()
 	p.OnDoPrint(func(toPrint string) error {
-		err := p.Print("This is the FastPrintPlugin " + toPrint)
-		// Trigger a close after printing
-		p.Close()
-		return err
+		return p.Print("This is the FastPrintPlugin " + toPrint)
 	})
 
 	p.OnAllInitialized(func() error {
 		logger.Println("All plugins initialized")
+		return nil
+	})
+
+	p.OnShouldClose(func() error {
+		p.Close()
 		return nil
 	})
 

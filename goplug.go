@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"io/ioutil"
+	"os"
 	"os/exec"
 	"path"
 	"time"
@@ -22,11 +23,14 @@ type plugin struct {
 	PluginInfo
 	*exec.Cmd
 
-	// initialized gets closed when initialized
-	initialized chan bool
+	// initializedSig gets closed when initialized
+	initializedSig chan bool
 
 	// stdinPipe is the pipe to send data to the plugin.
 	stdinPipe io.WriteCloser
+
+	finishedSig    chan bool
+	lastMessageSig chan bool
 }
 
 // GoPlug loads plugins from the PluginFolder.
@@ -115,12 +119,15 @@ func (g *GoPlug) Init() error {
 		filePath := path.Join(g.PluginFolder, entry.Name())
 		p := plugin{
 			Cmd: &exec.Cmd{
-				Path: filePath,
+				Stderr: os.Stderr,
+				Path:   filePath,
 				// ToDo: maybe add something as arg to indicate that the binary
 				//       should be started in "plugin-mode".
 				Args: []string{filePath},
 			},
-			initialized: make(chan bool),
+			initializedSig: make(chan bool),
+			finishedSig:    make(chan bool),
+			lastMessageSig: make(chan bool),
 		}
 
 		p.stdinPipe, err = p.StdinPipe()
@@ -134,11 +141,20 @@ func (g *GoPlug) Init() error {
 
 		g.plugins = append(g.plugins, p)
 
-		err = p.Start()
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
+		// Run in extra go routine to be able
+		// to do something directly after it closes
+		// (e.g. set the finishedSig)
+		go func() {
+			err = p.Run()
+			if err != nil {
+				fmt.Println(err)
+			}
+
+			// Wait for the last message to be received.
+			<-p.lastMessageSig
+
+			close(p.finishedSig)
+		}()
 	}
 
 	deadline := time.Now().Add(3 * time.Second)
@@ -149,7 +165,7 @@ func (g *GoPlug) Init() error {
 
 			for {
 				select {
-				case _, ok := <-p.initialized:
+				case _, ok := <-p.initializedSig:
 					if !ok {
 						initialized = true
 					}
@@ -162,8 +178,9 @@ func (g *GoPlug) Init() error {
 			}
 
 			if !initialized {
-				// Process was not initialized in time.
+				// Process was not initializedSig in time.
 				p.Process.Kill()
+				close(p.finishedSig)
 				if _, ok := g.registeredPlugins[p.ID]; ok {
 					delete(g.registeredPlugins, p.ID)
 				}
@@ -195,10 +212,15 @@ func (g *GoPlug) Send(cmd string, message interface{}) error {
 
 	// ToDo: collect errors and return them all.
 	for _, p := range g.plugins {
-		_, err := p.stdinPipe.Write([]byte(cmd + " " + string(data) + "\n"))
-		if err != nil {
-			fmt.Println(err)
-			continue
+		// Only send to still running plugins.
+		select {
+		case <-p.finishedSig:
+		default:
+			_, err := p.stdinPipe.Write([]byte(cmd + " " + string(data) + "\n"))
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
 		}
 	}
 
@@ -217,17 +239,12 @@ func (g *GoPlug) Close() error {
 	//       that.
 
 	for _, p := range g.plugins {
-		err := p.Wait()
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
-		err = p.stdinPipe.Close()
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
+		_, _ = <-p.finishedSig
+		//err = p.stdinPipe.Close()
+		//if err != nil {
+		//	fmt.Println(err)
+		//	continue
+		//}
 	}
 	return nil
 }

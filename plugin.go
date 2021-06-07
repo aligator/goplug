@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 )
 
 type commandFn = func(data []byte) error
@@ -25,6 +26,8 @@ type Plugin struct {
 
 	shouldCloseSig chan bool
 	actualCloseSig chan bool
+
+	WG sync.WaitGroup
 }
 
 func (p *Plugin) ShouldClose() bool {
@@ -106,7 +109,7 @@ func (p *Plugin) RegisterCommand(cmd string, factory func() interface{}, listene
 	}
 }
 
-// Run marks the plugin as initialized and starts the message-reading loop.
+// Run marks the plugin as initializedSig and starts the message-reading loop.
 // You have to setup all events before calling this method.
 // This function only exits on error of if the 'close' command was received.
 func (p *Plugin) Run() error {
@@ -118,8 +121,11 @@ func (p *Plugin) Run() error {
 
 	go func() {
 		<-p.actualCloseSig
-		// ToDo: Could not find a better way to close the reader.ReadLine
-		//       loop instantly.
+		p.WG.Wait()
+
+		// Send the last message to signalize that no more messages
+		// will come from this plugin as of now.
+		p.Send("lastMessage", nil)
 		os.Exit(0)
 	}()
 
@@ -149,7 +155,9 @@ func (p *Plugin) Run() error {
 
 		if listener, ok := p.commands[cmd]; ok {
 			go func() {
+				p.WG.Add(1)
 				_ = listener(data)
+				p.WG.Done()
 			}()
 			// TODO: error handling
 			//err := listener(data)
@@ -162,9 +170,18 @@ func (p *Plugin) Run() error {
 	return nil
 }
 
-// OnAllInitialized is an event which notifies that all plugins are initialized.
+// OnAllInitialized is an event which notifies that all plugins are initializedSig.
 func (p *Plugin) OnAllInitialized(listener func() error) {
 	p.RegisterCommand("allInitialized", nil, func(message interface{}) error {
+		return listener()
+	})
+}
+
+// OnShouldClose is an event which notifies that the plugin should shutdown.
+// You may call Plugin.Close in it to do so instantly.
+// You can also use Plugin.ShouldClose at any time to check if this event already happened.
+func (p *Plugin) OnShouldClose(listener func() error) {
+	p.RegisterCommand("close", nil, func(message interface{}) error {
 		return listener()
 	})
 }
