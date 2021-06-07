@@ -4,11 +4,17 @@ import (
 	"fmt"
 	"github.com/aligator/goplug"
 	"github.com/aligator/goplug/cmd/server/plugin"
+	"math/rand"
 )
 
 func newString() interface{} {
 	var s string
 	return &s
+}
+
+func newInt() interface{} {
+	var i int
+	return &i
 }
 
 func main() {
@@ -19,6 +25,13 @@ func main() {
 	plug.RegisterOnCommand("print", newString, func(p goplug.PluginInfo, message interface{}) error {
 		text := message.(*string)
 		fmt.Println(*text)
+		return nil
+	})
+
+	plug.RegisterOnCommand("fnRand", nil, func(p goplug.PluginInfo, message interface{}) error {
+		go func() {
+			_ = plug.Send("fnRand", rand.Int())
+		}()
 		return nil
 	})
 

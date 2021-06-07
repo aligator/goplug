@@ -81,6 +81,10 @@ func (g *GoPlug) RegisterOnCommand(registerCmd string, factory func() interface{
 			return nil
 		}
 
+		if factory == nil {
+			return listener(p.PluginInfo, nil)
+		}
+
 		data := factory()
 		err := json.Unmarshal(message, &data)
 		if err != nil {

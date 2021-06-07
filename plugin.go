@@ -8,6 +8,8 @@ import (
 	"os"
 )
 
+type commandFn = func(data []byte) error
+
 // RegisterMessage is the message which is the
 // payload for the 'register' command.
 type RegisterMessage struct {
@@ -19,7 +21,23 @@ type RegisterMessage struct {
 // the plugin-host.
 type Plugin struct {
 	ID       string
-	commands map[string]func(data []byte) error
+	commands map[string]commandFn
+
+	shouldCloseSig chan bool
+	actualCloseSig chan bool
+}
+
+func (p *Plugin) ShouldClose() bool {
+	select {
+	case _, open := <-p.shouldCloseSig:
+		return !open
+	default:
+		return false
+	}
+}
+
+func (p *Plugin) Close() {
+	close(p.actualCloseSig)
 }
 
 // Register registers the plugin with the given ID.
@@ -70,7 +88,7 @@ func (p *Plugin) Logger() *log.Logger {
 //	return listener(data.Text)
 func (p *Plugin) RegisterCommand(cmd string, factory func() interface{}, listener func(message interface{}) error) {
 	if p.commands == nil {
-		p.commands = make(map[string]func(data []byte) error)
+		p.commands = make(map[string]commandFn)
 	}
 
 	p.commands[cmd] = func(message []byte) error {
@@ -92,12 +110,23 @@ func (p *Plugin) RegisterCommand(cmd string, factory func() interface{}, listene
 // You have to setup all events before calling this method.
 // This function only exits on error of if the 'close' command was received.
 func (p *Plugin) Run() error {
+	p.shouldCloseSig = make(chan bool)
+	p.actualCloseSig = make(chan bool)
 	p.Send("initialized", nil)
 
 	reader := bufio.NewReader(os.Stdin)
+
+	go func() {
+		<-p.actualCloseSig
+		// ToDo: Could not find a better way to close the reader.ReadLine
+		//       loop instantly.
+		os.Exit(0)
+	}()
+
 	for {
 		message, _, err := reader.ReadLine()
 		if err != nil {
+			fmt.Println(err)
 			return err
 		}
 
@@ -106,8 +135,12 @@ func (p *Plugin) Run() error {
 			return err
 		}
 
+		if cmd == "kill" {
+			return nil
+		}
+
 		if cmd == "close" {
-			break
+			close(p.shouldCloseSig)
 		}
 
 		if p.commands == nil {
@@ -115,10 +148,14 @@ func (p *Plugin) Run() error {
 		}
 
 		if listener, ok := p.commands[cmd]; ok {
-			err := listener(data)
-			if err != nil {
-				return err
-			}
+			go func() {
+				_ = listener(data)
+			}()
+			// TODO: error handling
+			//err := listener(data)
+			//if err != nil {
+			//	return err
+			//}
 		}
 	}
 

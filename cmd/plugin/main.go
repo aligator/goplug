@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"github.com/aligator/goplug/cmd/server/plugin"
+	"os"
+	"strconv"
 	"time"
 )
 
@@ -16,7 +18,26 @@ func main() {
 	logger := p.Logger()
 	p.OnDoPrint(func(toPrint string) error {
 		time.Sleep(2 * time.Second)
-		return p.Print("This is the SlowPrintPlugin " + toPrint)
+
+		res := make(chan int)
+		p.RegisterCommand("fnRand", func() interface{} {
+			var val int
+			return &val
+		}, func(message interface{}) error {
+			val := message.(*int)
+			res <- *val
+			return nil
+		})
+
+		p.Send("fnRand", nil)
+
+		val := <-res
+
+		err := p.Print("This is the SlowPrintPlugin " + toPrint + " " + strconv.Itoa(val))
+
+		// Trigger a close after printing
+		p.Close()
+		return err
 	})
 
 	p.OnAllInitialized(func() error {
@@ -26,6 +47,7 @@ func main() {
 
 	logger.Println("start RUN")
 	err = p.Run()
+	fmt.Fprint(os.Stderr, "eeeennnd")
 	if err != nil {
 		logger.Println(fmt.Sprint(err))
 	}
