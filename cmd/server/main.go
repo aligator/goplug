@@ -18,13 +18,13 @@ func main() {
 		PluginFolder: "./cmd/plugin-bin",
 	}
 
-	plug.RegisterOnCommand("print", newString, func(p goplug.PluginInfo, message interface{}) error {
+	plug.RegisterCommand("print", newString, func(p goplug.PluginInfo, message interface{}) error {
 		text := message.(*string)
 		fmt.Println(*text)
 		return nil
 	})
 
-	plug.RegisterOnCommand("fnRand", nil, func(p goplug.PluginInfo, message interface{}) error {
+	plug.RegisterCommand("fnRand", nil, func(p goplug.PluginInfo, message interface{}) error {
 		go func() {
 			rand.Seed(time.Now().UnixNano())
 			val := rand.Intn(100)

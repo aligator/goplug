@@ -66,7 +66,7 @@ func isValidPlugin(info fs.FileInfo) bool {
 	return true
 }
 
-// RegisterOnCommand can be used to register commands, plugins can send.
+// RegisterCommand can be used to register commands, plugins can send.
 // The cmd should be a unique string.
 //
 // The factory is used to create a new instance of whatever the message should
@@ -79,7 +79,7 @@ func isValidPlugin(info fs.FileInfo) bool {
 // So you can safely convert and use it like this:
 //  data := message.(*YourMessageType)
 //	return listener(data.Text)
-func (g *GoPlug) RegisterOnCommand(registerCmd string, factory func() interface{}, listener func(p PluginInfo, message interface{}) error) {
+func (g *GoPlug) RegisterCommand(registerCmd string, factory func() interface{}, listener func(p PluginInfo, message interface{}) error) {
 	g.onCommandListener = append(g.onCommandListener, func(p *plugin, cmd string, message []byte) error {
 		if cmd != registerCmd {
 			return nil
@@ -230,13 +230,13 @@ func (g *GoPlug) Send(cmd string, message interface{}) error {
 // Close sends a 'close' message to all plugins and waits until all plugins are
 // stopped.
 func (g *GoPlug) Close() error {
+	// Note: this 'close' is only a "please close" to the plugins.
+	// As there may be plugins which want to run much longer
+	// (e.g. notifications after some time).
 	err := g.Send("close", nil)
 	if err != nil {
 		return err
 	}
-
-	// ToDo: only wait for a certain time and kill all plugins not stopped after
-	//       that.
 
 	for _, p := range g.plugins {
 		_, _ = <-p.finishedSig
