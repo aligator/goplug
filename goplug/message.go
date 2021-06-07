@@ -4,21 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/aligator/goplug/message"
 	"log"
-	"strings"
 )
-
-// parseMessage splits the message by the first " ".
-// The first part is the command the rest is the payload
-// which should be valid json.
-func parseMessage(message string) (string, []byte, error) {
-	split := strings.SplitN(message, " ", 2)
-	if len(split) != 2 {
-		return "", nil, errors.New("invalid message")
-	}
-
-	return split[0], []byte(split[1]), nil
-}
 
 func onLog(data []byte) error {
 	var logMessage string
@@ -37,7 +25,7 @@ func onInitialized(p *plugin) error {
 
 func onRegister(g *GoPlug, p *plugin, data []byte) error {
 
-	registerMessage := &RegisterMessage{}
+	registerMessage := &message.RegisterMessage{}
 	err := json.Unmarshal(data, registerMessage)
 	if err != nil {
 		return err
@@ -57,9 +45,9 @@ func onRegister(g *GoPlug, p *plugin, data []byte) error {
 }
 
 // onMessage gets called when the plugin sent a new message.
-func (g *GoPlug) onMessage(p *plugin) func(message []byte) {
-	return func(message []byte) {
-		cmd, data, err := parseMessage(string(message))
+func (g *GoPlug) onMessage(p *plugin) func(payload []byte) {
+	return func(payload []byte) {
+		cmd, data, err := message.Parse(string(payload))
 		if err != nil {
 			fmt.Println(err)
 			return

@@ -1,12 +1,12 @@
-package goplug
+package plugin
 
-// PluginLogWriter can be used to configure any logger to write
+// LogWriter can be used to configure any logger to write
 // 'log' commands, as stdout cannot be used by plugins.
-type PluginLogWriter struct {
+type LogWriter struct {
 	Plugin *Plugin
 }
 
-func (l PluginLogWriter) Write(p []byte) (int, error) {
+func (l LogWriter) Write(p []byte) (int, error) {
 	err := l.Plugin.Send("log", string(p))
 	if err != nil {
 		return 0, err

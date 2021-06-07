@@ -1,7 +1,7 @@
 package plugin
 
 import (
-	"github.com/aligator/goplug"
+	"github.com/aligator/goplug/plugin"
 )
 
 type DoPrintMessage struct {
@@ -14,12 +14,12 @@ func newDoPrintMessage() interface{} {
 
 // TestPlugin defines the methods which can be used by plugins.
 type TestPlugin struct {
-	goplug.Plugin
+	plugin.Plugin
 }
 
 func New(ID string) TestPlugin {
 	return TestPlugin{
-		Plugin: goplug.Plugin{
+		Plugin: plugin.Plugin{
 			ID: ID,
 		},
 	}

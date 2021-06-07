@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/aligator/goplug"
 	"github.com/aligator/goplug/cmd/server/plugin"
+	"github.com/aligator/goplug/goplug"
 	"math/rand"
 	"time"
 )
@@ -11,11 +11,6 @@ import (
 func newString() interface{} {
 	var s string
 	return &s
-}
-
-func newInt() interface{} {
-	var i int
-	return &i
 }
 
 func main() {

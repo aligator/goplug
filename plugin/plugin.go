@@ -1,21 +1,16 @@
-package goplug
+package plugin
 
 import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"github.com/aligator/goplug/message"
 	"log"
 	"os"
 	"sync"
 )
 
 type commandFn = func(data []byte) error
-
-// RegisterMessage is the message which is the
-// payload for the 'register' command.
-type RegisterMessage struct {
-	ID string `json:"id"`
-}
 
 // Plugin is the base struct to be used to build plugins.
 // It already contains the basic methods to communicate with
@@ -40,7 +35,7 @@ func (p *Plugin) Close() {
 //
 // Register has to be the first message sent by any plugin.
 func (p *Plugin) Register() error {
-	return p.Send("register", RegisterMessage{
+	return p.Send("register", message.RegisterMessage{
 		ID: p.ID,
 	})
 }
@@ -61,7 +56,7 @@ func (p *Plugin) Send(cmd string, payload interface{}) error {
 // used for communication. When logging using this logger, the logs are
 // sent using the 'log' command.
 func (p *Plugin) Logger() *log.Logger {
-	return log.New(&PluginLogWriter{
+	return log.New(&LogWriter{
 		Plugin: p,
 	}, p.ID+" ", 0)
 }
@@ -119,13 +114,13 @@ func (p *Plugin) Run() error {
 	}()
 
 	for {
-		message, _, err := reader.ReadLine()
+		msg, _, err := reader.ReadLine()
 		if err != nil {
 			fmt.Println(err)
 			return err
 		}
 
-		cmd, data, err := parseMessage(string(message))
+		cmd, data, err := message.Parse(string(msg))
 		if err != nil {
 			return err
 		}
@@ -151,9 +146,9 @@ func (p *Plugin) Run() error {
 	return nil
 }
 
-// OnAllInitialized is an event which notifies that all plugins are initializedSig.
+// OnAllInitialized is an event which notifies that all plugins are initialized.
 func (p *Plugin) OnAllInitialized(listener func() error) {
-	p.RegisterCommand("allInitialized", nil, func(message interface{}) error {
+	p.RegisterCommand("allInitialized", nil, func(payload interface{}) error {
 		return listener()
 	})
 }
@@ -161,7 +156,7 @@ func (p *Plugin) OnAllInitialized(listener func() error) {
 // OnShouldClose is an event which notifies that the plugin should shutdown.
 // You may call Plugin.Close in it to do so instantly.
 func (p *Plugin) OnShouldClose(listener func() error) {
-	p.RegisterCommand("close", nil, func(message interface{}) error {
+	p.RegisterCommand("close", nil, func(payload interface{}) error {
 		return listener()
 	})
 }
