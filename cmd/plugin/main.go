@@ -5,6 +5,7 @@ import (
 	"github.com/aligator/goplug/cmd/server/plugin"
 	"os"
 	"strconv"
+	"time"
 )
 
 func main() {
@@ -16,7 +17,7 @@ func main() {
 
 	logger := p.Logger()
 	p.OnDoPrint(func(toPrint string) error {
-		//time.Sleep(1 * time.Second)
+		time.Sleep(1 * time.Second)
 
 		// This simulates a "function" -> send fnRand and get result fnRand.
 		// Will be made more easy when it works.
