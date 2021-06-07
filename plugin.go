@@ -24,19 +24,9 @@ type Plugin struct {
 	ID       string
 	commands map[string]commandFn
 
-	shouldCloseSig chan bool
 	actualCloseSig chan bool
 
 	WG sync.WaitGroup
-}
-
-func (p *Plugin) ShouldClose() bool {
-	select {
-	case _, open := <-p.shouldCloseSig:
-		return !open
-	default:
-		return false
-	}
 }
 
 func (p *Plugin) Close() {
@@ -113,7 +103,6 @@ func (p *Plugin) RegisterCommand(cmd string, factory func() interface{}, listene
 // You have to setup all events before calling this method.
 // This function only exits on error of if the 'close' command was received.
 func (p *Plugin) Run() error {
-	p.shouldCloseSig = make(chan bool)
 	p.actualCloseSig = make(chan bool)
 	p.Send("initialized", nil)
 
@@ -139,14 +128,6 @@ func (p *Plugin) Run() error {
 		cmd, data, err := parseMessage(string(message))
 		if err != nil {
 			return err
-		}
-
-		if cmd == "kill" {
-			return nil
-		}
-
-		if cmd == "close" {
-			close(p.shouldCloseSig)
 		}
 
 		if p.commands == nil {
@@ -179,7 +160,6 @@ func (p *Plugin) OnAllInitialized(listener func() error) {
 
 // OnShouldClose is an event which notifies that the plugin should shutdown.
 // You may call Plugin.Close in it to do so instantly.
-// You can also use Plugin.ShouldClose at any time to check if this event already happened.
 func (p *Plugin) OnShouldClose(listener func() error) {
 	p.RegisterCommand("close", nil, func(message interface{}) error {
 		return listener()
