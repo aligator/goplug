@@ -20,7 +20,6 @@ func main() {
 
 		// This simulates a "function" -> send fnRand and get result fnRand.
 		// Will be made more easy when it works.
-		p.WG.Add(1)
 		res := make(chan int)
 		p.RegisterCommand("fnRand", func() interface{} {
 			var val int
@@ -32,19 +31,14 @@ func main() {
 		})
 		p.Send("fnRand", nil)
 		val := <-res
-		p.WG.Done()
 
 		err := p.Print("This is the SlowPrintPlugin " + toPrint + " " + strconv.Itoa(val))
+		p.Close()
 		return err
 	})
 
 	p.OnAllInitialized(func() error {
 		logger.Println("All plugins initialized")
-		return nil
-	})
-
-	p.OnShouldClose(func() error {
-		p.Close()
 		return nil
 	})
 
