@@ -14,13 +14,6 @@ type TestHost struct {
 	commands map[string]goplug.OnOneShot
 }
 
-func (h *TestHost) GetRandomInt(args plugin.GetRandomIntRequest, reply *plugin.GetRandomIntResponse) error {
-	*reply = plugin.GetRandomIntResponse{
-		Rand: rand.Intn(args.N),
-	}
-	return nil
-}
-
 func (h TestHost) RegisterOneShot(info goplug.PluginInfo, action goplug.OnOneShot) error {
 	meta := new(plugin.TestMetadata)
 	err := json.Unmarshal(info.Metadata, meta)
@@ -41,6 +34,7 @@ func main() {
 	g := goplug.GoPlug{
 		PluginFolder: "./example/plugin-bin",
 		Host:         h,
+		Actions:      &plugin.Actions{},
 	}
 
 	err := g.Init()

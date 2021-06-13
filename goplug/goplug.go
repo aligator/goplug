@@ -55,6 +55,7 @@ type plugin struct {
 type GoPlug struct {
 	PluginFolder string
 	Host         Host
+	Actions      interface{}
 
 	plugins        []plugin
 	oneShotPlugins map[string]*plugin
@@ -143,10 +144,6 @@ func (g *GoPlug) Init() error {
 	close(errCh)
 
 	err, _ = <-allErrorsCh
-	if err != nil {
-		return err
-	}
-
 	return err
 }
 
@@ -176,7 +173,7 @@ func (g *GoPlug) oneShot(ID string, args []string) error {
 
 		s := rpc.NewServer()
 
-		err = s.RegisterName("Host", g.Host)
+		err = s.RegisterName("Host", g.Actions)
 		if err != nil {
 			return checkpoint.Wrap(fmt.Errorf("PluginID: %v: %w", ID, err), ErrCallingPlugin)
 		}

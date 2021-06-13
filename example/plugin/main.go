@@ -7,7 +7,6 @@ import (
 	"github.com/aligator/goplug/goplug"
 	"os"
 	"strconv"
-	"time"
 )
 
 type SuperPlugin struct {
@@ -37,8 +36,6 @@ func main() {
 		if err != nil {
 			return err
 		}
-
-		time.Sleep(time.Second)
 
 		fmt.Fprintln(os.Stderr, p.GetRandomInt(parsedInt))
 
