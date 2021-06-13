@@ -1,2 +1,2 @@
-cmd/plugin-bin/*
-!cmd/plugin-bin/.gitkeep
+example/plugin-bin/*
+!example/plugin-bin/.gitkeep

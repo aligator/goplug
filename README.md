@@ -6,10 +6,10 @@ child processes and communicates with them over stdin / stdout.
 ## Run example
 First build the plugin
 ```bash
-go build -o ./cmd/plugin-bin ./cmd/plugin  ./cmd/plugin2
+go build -o ./example/plugin-bin ./example/plugin  ./example/plugin2
 ```
 
 Then run the 'server'
 ```bash
-go run ./cmd/server
+go run ./example/server
 ```
