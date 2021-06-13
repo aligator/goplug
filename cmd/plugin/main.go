@@ -19,21 +19,7 @@ func main() {
 	p.OnDoPrint(func(toPrint string) error {
 		time.Sleep(1 * time.Second)
 
-		// This simulates a "function" -> send fnRand and get result fnRand.
-		// Will be made more easy when it works.
-		res := make(chan int)
-		p.RegisterCommand("fnRand", func() interface{} {
-			var val int
-			return &val
-		}, func(message interface{}) error {
-			val := message.(*int)
-			res <- *val
-			return nil
-		})
-		p.Send("fnRand", nil)
-		val := <-res
-
-		err := p.Print("This is the SlowPrintPlugin " + toPrint + " " + strconv.Itoa(val))
+		err = p.Print("This is the SlowPrintPlugin " + toPrint + " " + strconv.Itoa(*random))
 		p.Close()
 		return err
 	})

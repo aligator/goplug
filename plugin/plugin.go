@@ -7,7 +7,9 @@ import (
 	"github.com/aligator/goplug/message"
 	"log"
 	"os"
+	"strconv"
 	"sync"
+	"sync/atomic"
 )
 
 type commandFn = func(data []byte) error
@@ -22,6 +24,12 @@ type Plugin struct {
 	actualCloseSig chan bool
 
 	WG sync.WaitGroup
+
+	funcNum int64
+}
+
+func (p *Plugin) nextFuncNum() int64 {
+	return atomic.AddInt64(&p.funcNum, 1)
 }
 
 func (p *Plugin) Close() {
@@ -92,6 +100,33 @@ func (p *Plugin) RegisterCommand(cmd string, factory func() interface{}, listene
 
 		return listener(data)
 	}
+}
+
+type FuncCommand struct {
+	FuncNum int64  `json:"func_num"`
+	Payload string `json:"payload"` // ToDo: better way than json in json?
+}
+
+func (p *Plugin) Func(cmd string, payload interface{}) (interface{}, error) {
+	nextFuncNum := p.nextFuncNum()
+
+	res := make(chan int)
+
+	p.RegisterCommand("fn"+cmd, func() interface{} {
+		var val int
+		return &val
+	}, func(message interface{}) error {
+		val := message.(*int)
+		res <- *val
+		return nil
+	})
+	p.Send("fn"+cmd, FuncCommand{
+		FuncNum: nextFuncNum,
+		Payload: payload,
+	})
+	val := <-res
+
+	return val
 }
 
 // Run marks the plugin as initializedSig and starts the message-reading loop.

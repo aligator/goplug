@@ -24,13 +24,19 @@ func main() {
 		return nil
 	})
 
-	plug.RegisterCommand("fnRand", nil, func(p goplug.PluginInfo, message interface{}) error {
-		go func() {
-			rand.Seed(time.Now().UnixNano())
-			val := rand.Intn(100)
-			_ = plug.Send("fnRand", val)
-		}()
-		return nil
+	//plug.RegisterCommand("fnRand", nil, func(p goplug.PluginInfo, message interface{}) error {
+	//	go func() {
+	//		rand.Seed(time.Now().UnixNano())
+	//		val := rand.Intn(100)
+	//		_ = plug.Send("fnRand", val)
+	//	}()
+	//	return nil
+	//})
+
+	plug.RegisterFunc("rand", nil, func(p goplug.PluginInfo, message interface{}) (interface{}, error) {
+		rand.Seed(time.Now().UnixNano())
+		val := rand.Intn(100)
+		return val, nil
 	})
 
 	err := plug.Init()

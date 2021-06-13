@@ -3,6 +3,7 @@ package goplug
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/aligator/goplug/plugin"
 	"io"
 	"io/fs"
 	"io/ioutil"
@@ -13,20 +14,20 @@ import (
 )
 
 type PluginInfo struct {
-	// ID is set on the first message sent from the plugin during registration.
-	// it identifies the plugin uniquely.
+	// ID is set on the first message sent from the internalPlugin during registration.
+	// it identifies the internalPlugin uniquely.
 	ID string
 }
 
-// plugin is the internal representation of a plugin binary.
-type plugin struct {
+// internalPlugin is the internal representation of a internalPlugin binary.
+type internalPlugin struct {
 	PluginInfo
 	*exec.Cmd
 
 	// initializedSig gets closed when initialized
 	initializedSig chan bool
 
-	// stdinPipe is the pipe to send data to the plugin.
+	// stdinPipe is the pipe to send data to the internalPlugin.
 	stdinPipe io.WriteCloser
 
 	finishedSig    chan bool
@@ -38,16 +39,16 @@ type plugin struct {
 type GoPlug struct {
 	PluginFolder string
 
-	// plugins contains all known plugins found in the plugin folder.
-	// They may not be all valid plugin binaries.
+	// plugins contains all known plugins found in the internalPlugin folder.
+	// They may not be all valid internalPlugin binaries.
 	// When they got started and sent the 'register' command they get added to
 	// the registeredPlugins map.
-	plugins []plugin
+	plugins []internalPlugin
 
 	// registeredPlugins contains references to all plugins which already
 	// registered themselves.
-	registeredPlugins map[string]*plugin
-	onCommandListener []func(p *plugin, cmd string, data []byte) error
+	registeredPlugins map[string]*internalPlugin
+	onCommandListener []func(p *internalPlugin, cmd string, message []byte) (interface{}, error)
 }
 
 func isValidPlugin(info fs.FileInfo) bool {
@@ -61,7 +62,7 @@ func isValidPlugin(info fs.FileInfo) bool {
 
 	// ToDo: implement checks
 	//       Maybe invent a custom filename rule, such as
-	//       "***.plugin" ("***.plugin.exe" on windows).
+	//       "***.internalPlugin" ("***.internalPlugin.exe" on windows).
 	//       This could be made configurable...
 	return true
 }
@@ -79,20 +80,48 @@ func isValidPlugin(info fs.FileInfo) bool {
 // So you can safely convert and use it like this:
 //  data := message.(*YourMessageType)
 //	return listener(data.Text)
-func (g *GoPlug) RegisterCommand(registerCmd string, factory func() interface{}, listener func(p PluginInfo, message interface{}) error) {
-	g.onCommandListener = append(g.onCommandListener, func(p *plugin, cmd string, message []byte) error {
-		if cmd != registerCmd {
-			return nil
+func (g *GoPlug) RegisterCommand(name string, factory func() interface{}, listener func(p PluginInfo, message interface{}) error) {
+	g.onCommandListener = append(g.onCommandListener, func(p *internalPlugin, cmd string, message []byte) (interface{}, error) {
+		if cmd != name {
+			return nil, nil
 		}
 
 		if factory == nil {
-			return listener(p.PluginInfo, nil)
+			return nil, listener(p.PluginInfo, nil)
 		}
 
 		data := factory()
 		err := json.Unmarshal(message, &data)
 		if err != nil {
-			return err
+			return nil, err
+		}
+
+		return nil, listener(p.PluginInfo, data)
+	})
+}
+
+func (g *GoPlug) RegisterFunc(name string, factory func() interface{}, listener func(p PluginInfo, message interface{}) (interface{}, error)) {
+	g.onCommandListener = append(g.onCommandListener, func(p *internalPlugin, cmd string, message []byte) (interface{}, error) {
+		if cmd != name {
+			return nil, nil
+		}
+
+		// First get the FuncCommand as it includes the funcNum which is needed to send the result
+		funcData := plugin.FuncCommand{}
+		err := json.Unmarshal(message, &funcData)
+		if err != nil {
+			return nil, err
+		}
+
+		if factory == nil {
+			// TODO:
+			return listener(p.PluginInfo, funcData)
+		}
+
+		data := factory()
+		err = json.Unmarshal([]byte(funcData.Payload), &data)
+		if err != nil {
+			return nil, err
 		}
 
 		return listener(p.PluginInfo, data)
@@ -107,7 +136,7 @@ func (g *GoPlug) Init() error {
 		return err
 	}
 
-	g.registeredPlugins = make(map[string]*plugin)
+	g.registeredPlugins = make(map[string]*internalPlugin)
 
 	// ToDo: collect errors and return them all.
 	for _, entry := range entries {
@@ -115,14 +144,14 @@ func (g *GoPlug) Init() error {
 			continue
 		}
 
-		// Start the plugin.
+		// Start the internalPlugin.
 		filePath := path.Join(g.PluginFolder, entry.Name())
-		p := plugin{
+		p := internalPlugin{
 			Cmd: &exec.Cmd{
 				Stderr: os.Stderr,
 				Path:   filePath,
 				// ToDo: maybe add something as arg to indicate that the binary
-				//       should be started in "plugin-mode".
+				//       should be started in "internalPlugin-mode".
 				Args: []string{filePath},
 			},
 			initializedSig: make(chan bool),

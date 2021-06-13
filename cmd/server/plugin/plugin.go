@@ -32,6 +32,15 @@ func (p *TestPlugin) OnDoPrint(listener func(messageToPrint string) error) {
 	})
 }
 
-func (p TestPlugin) Print(message string) error {
+func (p *TestPlugin) Print(message string) error {
 	return p.Send("print", message)
+}
+
+func (p *TestPlugin) Rand() (int, error) {
+	res, err := p.Func("rand", nil)
+	if err != nil {
+		return 0, err
+	}
+	random := res.(*int)
+	return *random, nil
 }

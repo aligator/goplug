@@ -18,12 +18,12 @@ func onLog(data []byte) error {
 	return nil
 }
 
-func onInitialized(p *plugin) error {
+func onInitialized(p *internalPlugin) error {
 	close(p.initializedSig)
 	return nil
 }
 
-func onRegister(g *GoPlug, p *plugin, data []byte) error {
+func onRegister(g *GoPlug, p *internalPlugin, data []byte) error {
 
 	registerMessage := &message.RegisterMessage{}
 	err := json.Unmarshal(data, registerMessage)
@@ -32,20 +32,20 @@ func onRegister(g *GoPlug, p *plugin, data []byte) error {
 	}
 
 	if _, ok := g.registeredPlugins[registerMessage.ID]; ok {
-		err := fmt.Errorf("a plugin with the id %v is already registered", registerMessage.ID)
+		err := fmt.Errorf("a internalPlugin with the id %v is already registered", registerMessage.ID)
 		// Kill the process as it is of no use anymore.
 		_ = p.Process.Kill()
 		return err
 	}
 
-	// Register the plugin.
+	// Register the internalPlugin.
 	p.ID = registerMessage.ID
 	g.registeredPlugins[registerMessage.ID] = p
 	return nil
 }
 
-// onMessage gets called when the plugin sent a new message.
-func (g *GoPlug) onMessage(p *plugin) func(payload []byte) {
+// onMessage gets called when the internalPlugin sent a new message.
+func (g *GoPlug) onMessage(p *internalPlugin) func(payload []byte) {
 	return func(payload []byte) {
 		cmd, data, err := message.Parse(string(payload))
 		if err != nil {
@@ -74,7 +74,7 @@ func (g *GoPlug) onMessage(p *plugin) func(payload []byte) {
 			close(p.lastMessageSig)
 		}
 
-		// log can be used to print log messages inside of a plugin.
+		// log can be used to print log messages inside of a internalPlugin.
 		if cmd == "log" {
 			err := onLog(data)
 			if err != nil {
@@ -93,7 +93,17 @@ func (g *GoPlug) onMessage(p *plugin) func(payload []byte) {
 
 		// All other messages are forwarded to all listeners
 		for _, listener := range g.onCommandListener {
-			err := listener(p, cmd, data)
+			resData, err := listener(p, cmd, data)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			if resData == nil {
+				return
+			}
+
+			// ToDo: send only to the plugin which requested this (p)
+			err = g.Send(cmd, resData)
 			if err != nil {
 				fmt.Println(err)
 				continue
