@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/aligator/goplug/example/host/plugin"
 	"github.com/aligator/goplug/goplug"
-	"os"
 	"strconv"
 )
 
@@ -24,10 +23,7 @@ func New() SuperPlugin {
 
 func main() {
 	p := New()
-	fmt.Fprintln(os.Stderr, "Created superplugin", os.Args)
-
 	p.SetSubCommand("rand", func(args []string) error {
-		fmt.Fprintln(os.Stderr, args)
 		if len(args) < 2 {
 			return errors.New("rand: invalid arg count")
 		}
@@ -37,7 +33,7 @@ func main() {
 			return err
 		}
 
-		fmt.Fprintln(os.Stderr, p.GetRandomInt(parsedInt))
+		p.Print(fmt.Sprintf("Random result for input %v: \n%v\n", args[1], strconv.Itoa(p.GetRandomInt(parsedInt))))
 
 		return nil
 	})

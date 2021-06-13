@@ -53,7 +53,7 @@ func main() {
 		return
 	}
 
-	// Call plugins.
+	// Call registered commands from plugins.
 	for key, cmd := range h.commands {
 		if key == os.Args[1] {
 			cmd(os.Args[1:])

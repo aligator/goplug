@@ -20,7 +20,7 @@ func (p *Plugin) Init() {
 	init := flag.Bool("init", false, "")
 	flag.Parse()
 
-	// Return the plugin info on init.
+	// Return the plugin info on init just using stdout.
 	if *init {
 		res, err := json.Marshal(p.PluginInfo)
 		if err != nil {
@@ -44,6 +44,6 @@ func (p *Plugin) Call(serviceMethod string, args interface{}, reply interface{})
 	return p.client.Call("Host."+serviceMethod, args, reply)
 }
 
-func (p *Plugin) Close() error {
-	return p.client.Close()
+func (p *Plugin) Print(text string) error {
+	return p.client.Call("HostControl.Print", text, nil)
 }

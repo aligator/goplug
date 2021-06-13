@@ -178,6 +178,11 @@ func (g *GoPlug) oneShot(ID string, args []string) error {
 			return checkpoint.Wrap(fmt.Errorf("PluginID: %v: %w", ID, err), ErrCallingPlugin)
 		}
 
+		err = s.RegisterName("HostControl", &HostControl{})
+		if err != nil {
+			return checkpoint.Wrap(fmt.Errorf("PluginID: %v: %w", ID, err), ErrCallingPlugin)
+		}
+
 		go func() {
 			s.ServeCodec(codec)
 		}()

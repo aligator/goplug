@@ -36,3 +36,10 @@ func (p *Plugin) GetRandomInt(n int) int {
 
 	return response.Rand
 }
+
+func (p *Plugin) Print(text string) {
+	// Just pass through.
+	// Compose the Plugin with the internal Host-Plugin would also work, but
+	// expose the internal methods to the plugin.
+	p.plugin.Print(text)
+}
