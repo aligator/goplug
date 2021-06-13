@@ -52,7 +52,9 @@ func Collect(errCh <-chan error) <-chan error {
 					errors = append(errors, err)
 				}
 				if !ok {
-					allCh <- errors
+					if len(errors) > 0 {
+						allCh <- errors
+					}
 					close(allCh)
 					return
 				}

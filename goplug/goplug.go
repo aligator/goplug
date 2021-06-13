@@ -2,17 +2,28 @@ package goplug
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/aligator/checkpoint"
+	"github.com/aligator/goplug/common"
 	"github.com/aligator/goplug/errutil"
 	"io/fs"
 	"io/ioutil"
+	"log"
+	"net/rpc"
+	"net/rpc/jsonrpc"
+	"os"
 	"os/exec"
 	"path"
 	"sync"
 )
 
 type PluginType string
+
+var (
+	ErrPluginDoesNotExist = errors.New("plugin does not exist")
+	ErrCallingPlugin      = errors.New("could not call the plugin")
+)
 
 const (
 	// OneShot is a plugin which gets called when a specific event happens.
@@ -30,17 +41,23 @@ const (
 type PluginInfo struct {
 	ID         string     `json:"id"`
 	PluginType PluginType `json:"plugin_type"`
+
+	// Metadata contains additional information which is host-specific.
+	// It may just be another json string.
+	Metadata []byte `json:"metadata"`
 }
 
 type plugin struct {
 	PluginInfo
-	*exec.Cmd
+	filePath string
 }
 
 type GoPlug struct {
-	PluginFolder      string
-	plugins           []plugin
-	registeredPlugins map[string]*plugin
+	PluginFolder string
+	Host         Host
+
+	plugins        []plugin
+	oneShotPlugins map[string]*plugin
 }
 
 func isValidPlugin(info fs.FileInfo) bool {
@@ -67,7 +84,7 @@ func (g *GoPlug) Init() error {
 		return err
 	}
 
-	g.registeredPlugins = make(map[string]*plugin)
+	g.oneShotPlugins = make(map[string]*plugin)
 
 	errCh := make(chan error)
 	allErrorsCh := errutil.Collect(errCh)
@@ -83,13 +100,16 @@ func (g *GoPlug) Init() error {
 				return
 			}
 
-			p := plugin{}
-
 			// Start the plugin with the -init flag.
 			// The plugin should return some information about it.
 			filePath := path.Join(g.PluginFolder, entry.Name())
 
+			p := plugin{
+				filePath: filePath,
+			}
+
 			cmd := exec.Command(filePath, "-init")
+			cmd.Stderr = os.Stderr
 			res, err := cmd.Output()
 			if err != nil {
 				errCh <- checkpoint.From(err)
@@ -102,7 +122,20 @@ func (g *GoPlug) Init() error {
 				return
 			}
 
-			fmt.Println("info", p.PluginInfo)
+			if p.PluginType != OneShot {
+				log.Println(p.ID, "- currently only one_shot plugins are supported")
+				return
+			}
+
+			g.oneShotPlugins[p.ID] = &p
+			err = g.Host.RegisterOneShot(p.PluginInfo, func(args []string) error {
+				// Run
+				return g.oneShot(p.ID, args)
+			})
+			if err != nil {
+				errCh <- checkpoint.From(err)
+				return
+			}
 		}()
 	}
 
@@ -110,5 +143,54 @@ func (g *GoPlug) Init() error {
 	close(errCh)
 
 	err, _ = <-allErrorsCh
+	if err != nil {
+		return err
+	}
+
 	return err
+}
+
+func (g *GoPlug) oneShot(ID string, args []string) error {
+	if p, ok := g.oneShotPlugins[ID]; !ok {
+		return checkpoint.From(fmt.Errorf("PluginID: %v: %w", ID, ErrPluginDoesNotExist))
+	} else {
+		// Start rpc.
+		cmd := exec.Command(p.filePath, args...)
+
+		outPipe, err := cmd.StdoutPipe()
+		if err != nil {
+			return checkpoint.Wrap(fmt.Errorf("PluginID: %v: %w", ID, err), ErrCallingPlugin)
+		}
+
+		inPipe, err := cmd.StdinPipe()
+		if err != nil {
+			return checkpoint.Wrap(fmt.Errorf("PluginID: %v: %w", ID, err), ErrCallingPlugin)
+		}
+
+		cmd.Stderr = os.Stderr
+
+		codec := jsonrpc.NewServerCodec(common.CombinedReadWriter{
+			In:  outPipe,
+			Out: inPipe,
+		})
+
+		s := rpc.NewServer()
+
+		err = s.RegisterName("Host", g.Host)
+		if err != nil {
+			return checkpoint.Wrap(fmt.Errorf("PluginID: %v: %w", ID, err), ErrCallingPlugin)
+		}
+
+		go func() {
+			s.ServeCodec(codec)
+		}()
+
+		// Start plugin
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/aligator/goplug/goplug"
+	"os"
 )
 
 type Plugin struct {
@@ -22,5 +23,6 @@ func (p Plugin) Init() {
 			panic(err)
 		}
 		fmt.Print(string(res))
+		os.Exit(0)
 	}
 }
