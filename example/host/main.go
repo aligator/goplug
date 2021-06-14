@@ -16,7 +16,7 @@ type TestHost struct {
 
 func (h TestHost) RegisterOneShot(info goplug.PluginInfo, action goplug.OnOneShot) error {
 	meta := new(plugin.TestMetadata)
-	err := json.Unmarshal(info.Metadata, meta)
+	err := json.Unmarshal([]byte(info.Metadata), meta)
 	if err != nil {
 		return err
 	}

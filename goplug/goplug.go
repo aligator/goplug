@@ -44,7 +44,7 @@ type PluginInfo struct {
 
 	// Metadata contains additional information which is host-specific.
 	// It may just be another json string.
-	Metadata []byte `json:"metadata"`
+	Metadata string `json:"metadata"`
 }
 
 type plugin struct {

@@ -39,7 +39,7 @@ func (p *Plugin) SetSubCommand(name string, subCommand func(args []string) error
 
 	p.subCommandFunc = subCommand
 	p.subCommand = name
-	p.plugin.Metadata = metaJson
+	p.plugin.Metadata = string(metaJson)
 
 	return nil
 }
