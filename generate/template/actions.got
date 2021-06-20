@@ -1,0 +1,98 @@
+package {{ .Package }}
+
+import (
+	"github.com/aligator/goplug/client"
+	{{ range .Imports }}"{{ . }}"{{ end }}
+)
+
+// HostActions contains the host-implementations of actions.
+type HostActions struct {
+	{{ range .References }}{{ .Name }} {{ .Type }}{{ end }}
+}
+
+type ClientActions struct {
+	client *client.Client
+}
+
+func NewClientActions(plugin *client.Client) ClientActions {
+	return ClientActions{
+		client: plugin,
+	}
+}
+
+// Make some plugin-methods available to the plugins.
+
+func (c *ClientActions) Print(text string) {
+	c.client.Print(text)
+}
+
+// Action implementations for host and client.
+{{ range .Actions }}
+type {{ .Name }}Request struct {
+	{{ range .Request }}{{ .NamePublic }} {{ .Type }} `json:"{{ .Name }}"`{{ end }}
+}
+
+type {{ .Name }}Response struct {
+	{{ range .Response }}{{ .NamePublic }} {{ .Type }} `json:"{{ .Name }}"`{{ end }}
+}
+
+func (h *HostActions) {{ .Name }}(args {{ .Name }}Request, reply *{{ .Name }}Response) error {
+	// Host implementation.
+	{{ range .Response }}{{ .Name }},{{ end }} err := h.{{ .Ref }}.{{ .Name }}(
+	{{ range .Request }}args.{{ .NamePublic }},{{ end }}
+	)
+	if err != nil {
+		return err
+	}
+
+	*reply = {{ .Name }}Response{
+		{{ range .Response }}{{ .NamePublic }}: {{ .Name }},{{ end }}
+	}
+	return nil
+}
+
+func (c *ClientActions) {{ .Name }}(
+	{{ range .Request }}{{ .Name }} {{ .Type }},{{ end }}
+) {{ .Name }}Response {
+	// Calling from the plugin.
+	response := {{ .Name }}Response{}
+	err := c.client.Call("{{ .Name }}", {{ .Name }}Request{
+		{{ range .Request }}{{ .NamePublic }}: {{ .Name }},{{ end }}
+	}, &response)
+	if err != nil {
+		panic(err)
+	}
+
+	return response
+}
+{{ end }}
+
+/*type GetRandomIntRequest struct {
+	N int `json:"n"`
+}
+
+type GetRandomIntResponse struct {
+	Rand int `json:"rand"`
+}
+
+func (h *HostActions) GetRandomInt(args GetRandomIntRequest, reply *GetRandomIntResponse) error {
+	// Host implementation.
+	*reply = GetRandomIntResponse{
+		Rand: rand.Intn(args.N),
+	}
+	return nil
+}
+
+func (c *ClientActions) GetRandomInt(n int) int {
+	// Calling from the plugin.
+	response := GetRandomIntResponse{}
+	err := c.client.Call("GetRandomInt", GetRandomIntRequest{
+		N: n,
+	}, &response)
+	if err != nil {
+		panic(err)
+	}
+
+	return response.Rand
+}
+*/

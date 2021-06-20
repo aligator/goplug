@@ -1,22 +1,23 @@
-package plugin
+package client
 
 import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/aligator/goplug/common"
-	"github.com/aligator/goplug/goplug"
 	"net/rpc"
 	"net/rpc/jsonrpc"
 	"os"
+
+	"github.com/aligator/goplug/common"
+	"github.com/aligator/goplug/goplug"
 )
 
-type Plugin struct {
+type Client struct {
 	goplug.PluginInfo
 	client *rpc.Client
 }
 
-func (p *Plugin) Init() {
+func (p *Client) Init() error {
 	init := flag.Bool("init", false, "")
 	flag.Parse()
 
@@ -38,12 +39,14 @@ func (p *Plugin) Init() {
 			Out: os.Stdout,
 		})
 	}
+
+	return nil
 }
 
-func (p *Plugin) Call(serviceMethod string, args interface{}, reply interface{}) error {
+func (p *Client) Call(serviceMethod string, args interface{}, reply interface{}) error {
 	return p.client.Call("Host."+serviceMethod, args, reply)
 }
 
-func (p *Plugin) Print(text string) error {
+func (p *Client) Print(text string) error {
 	return p.client.Call("HostControl.Print", text, nil)
 }

@@ -3,11 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/aligator/goplug/example/host/plugin"
-	"github.com/aligator/goplug/goplug"
 	"math/rand"
 	"os"
 	"time"
+
+	"github.com/aligator/goplug/example/host/plugin"
+	"github.com/aligator/goplug/example/host/plugin/actions"
+	"github.com/aligator/goplug/goplug"
 )
 
 type TestHost struct {
@@ -34,7 +36,7 @@ func main() {
 	g := goplug.GoPlug{
 		PluginFolder: "./example/plugin-bin",
 		Host:         h,
-		Actions:      &plugin.Actions{},
+		Actions:      &actions.HostActions{},
 	}
 
 	err := g.Init()

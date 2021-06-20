@@ -2,9 +2,11 @@ package plugin
 
 import (
 	"encoding/json"
-	"github.com/aligator/goplug/goplug"
-	"github.com/aligator/goplug/plugin"
 	"os"
+
+	"github.com/aligator/goplug/client"
+	"github.com/aligator/goplug/example/host/gen"
+	"github.com/aligator/goplug/goplug"
 )
 
 type TestMetadata struct {
@@ -12,16 +14,19 @@ type TestMetadata struct {
 }
 
 type Plugin struct {
-	plugin         plugin.Plugin
+	plugin3.ClientActions
+	plugin         *client.Client
 	subCommand     string
 	subCommandFunc func(args []string) error
 }
 
 func New(info goplug.PluginInfo) Plugin {
+	plugin := &client.Client{
+		PluginInfo: info,
+	}
 	return Plugin{
-		plugin: plugin.Plugin{
-			PluginInfo: info,
-		},
+		ClientActions: plugin3.NewClientActions(plugin),
+		plugin:        plugin,
 	}
 }
 
