@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/aligator/goplug/client"
-	"github.com/aligator/goplug/example/host/gen"
+	actionsd "github.com/aligator/goplug/example/host/plugin/actions"
 	"github.com/aligator/goplug/goplug"
 )
 
@@ -14,7 +14,7 @@ type TestMetadata struct {
 }
 
 type Plugin struct {
-	plugin3.ClientActions
+	actionsd.ClientActions
 	plugin         *client.Client
 	subCommand     string
 	subCommandFunc func(args []string) error
@@ -25,7 +25,7 @@ func New(info goplug.PluginInfo) Plugin {
 		PluginInfo: info,
 	}
 	return Plugin{
-		ClientActions: plugin3.NewClientActions(plugin),
+		ClientActions: actionsd.NewClientActions(plugin),
 		plugin:        plugin,
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/aligator/goplug/example/host/plugin"
-	"github.com/aligator/goplug/example/host/plugin/actions"
+	actionsd "github.com/aligator/goplug/example/host/plugin/actions"
 	"github.com/aligator/goplug/goplug"
 )
 
@@ -36,7 +36,7 @@ func main() {
 	g := goplug.GoPlug{
 		PluginFolder: "./example/plugin-bin",
 		Host:         h,
-		Actions:      &actions.HostActions{},
+		Actions:      &actionsd.HostActions{},
 	}
 
 	err := g.Init()

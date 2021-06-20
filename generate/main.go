@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"embed"
 	"errors"
 	"flag"
@@ -17,11 +18,13 @@ import (
 
 	"github.com/aligator/checkpoint"
 	"github.com/spf13/afero"
+	"golang.org/x/tools/imports"
 )
 
 type match struct {
 	fn   *ast.FuncDecl
 	pack *ast.Package
+	file *ast.File
 	path string
 }
 
@@ -31,6 +34,29 @@ type Generator struct {
 	Import string
 
 	found []match
+}
+
+func (g *Generator) Clean() error {
+	fs := afero.NewOsFs()
+	// Generate the plugin file.
+
+	// Check if folder exists. If it already exists, delete it.
+	if _, err := fs.Stat(g.Out); err == nil {
+		err := fs.RemoveAll(g.Out)
+		if err != nil {
+			return checkpoint.From(err)
+		}
+	} else if err != nil && !errors.Is(err, afero.ErrFileNotFound) {
+		return checkpoint.From(err)
+	}
+
+	// Re-create it.
+	err := fs.Mkdir(g.Out, 0777)
+	if err != nil {
+		return checkpoint.From(err)
+	}
+
+	return nil
 }
 
 func (g *Generator) Search() error {
@@ -62,6 +88,7 @@ func (g *Generator) Search() error {
 								g.found = append(g.found, match{
 									fn:   funcDecl,
 									pack: p,
+									file: f,
 									path: path,
 								})
 								break
@@ -93,9 +120,14 @@ type Reference struct {
 	Type string
 }
 
+type Import struct {
+	Name string
+	Path string
+}
+
 type PluginData struct {
 	Package    string
-	Imports    []string
+	Imports    []Import
 	References []Reference
 	Actions    []Action
 }
@@ -104,27 +136,8 @@ type PluginData struct {
 var templateFS embed.FS
 
 func (g *Generator) Generate() error {
-	fs := afero.NewOsFs()
-	// Generate the plugin file.
-
-	// Check if folder exists. If it already exists, delete it.
-	if _, err := fs.Stat(g.Out); err == nil {
-		err := fs.RemoveAll(g.Out)
-		if err != nil {
-			return checkpoint.From(err)
-		}
-	} else if err != nil && !errors.Is(err, afero.ErrFileNotFound) {
-		return checkpoint.From(err)
-	}
-
-	// Re-create it.
-	err := fs.Mkdir(g.Out, 0777)
-	if err != nil {
-		return checkpoint.From(err)
-	}
-
 	data := PluginData{
-		Package: "plugin",
+		Package: "plug",
 	}
 
 	// Add references
@@ -148,28 +161,61 @@ func (g *Generator) Generate() error {
 		fmt.Println(rcvTargetName)
 
 		refName := "ref" + strconv.Itoa(i)
+		// TODO: resolve package name collision (maybe just use a name for its import) (see also bellow)
 		refType := action.pack.Name + "." + rcvTargetName
 		data.References = append(data.References, Reference{
 			Name: refName,
 			Type: refType,
 		})
 
-		data.Imports = append(data.Imports, filepath.Join(g.Import, action.path))
+		// TODO: filter double imports
+		data.Imports = append(data.Imports, Import{
+			Name: "", // Todo: name it with a definitely unique name to be sure.
+			Path: filepath.Join(g.Import, action.path),
+		})
 
-		data.Actions = append(data.Actions, Action{
-			Name: action.fn.Name.Name,
-			Ref:  refName,
-			Request: []Param{{
-				Name:       "n",
-				NamePublic: "N",
-				Type:       "int",
-			}},
+		// Generate actions.
+		actionData := Action{
+			Name:    action.fn.Name.Name,
+			Ref:     refName,
+			Request: []Param{},
 			Response: []Param{{
 				Name:       "rand",
 				NamePublic: "Rand",
 				Type:       "int",
 			}},
-		})
+		}
+
+		for _, param := range action.fn.Type.Params.List {
+			var paramType string
+
+			switch v := param.Type.(type) {
+			case *ast.Ident:
+				paramType = v.Name
+				if v.Obj != nil {
+					// It is a object, not a standard type (like int, string, ...)
+					// TODO: resolve package name collision (maybe just use a name for its import) (see also above)
+					paramType = action.pack.Name + "." + paramType
+				}
+			case *ast.StarExpr:
+				paramType = v.X.(*ast.Ident).Name
+			case *ast.SelectorExpr:
+				// It is a reference to another type.
+				paramType = v.X.(*ast.Ident).Name + "." + v.Sel.Name
+				// ToDo: Try to find out the import used for that if it is not in the same package.
+			default:
+				return checkpoint.From(errors.New("param type not supported"))
+			}
+
+			actionData.Request = append(actionData.Request, Param{
+				Name:       param.Names[0].Name,
+				NamePublic: strings.ToUpper(string(param.Names[0].Name[0])) + param.Names[0].Name[1:],
+				Type:       paramType,
+			})
+
+		}
+
+		data.Actions = append(data.Actions, actionData)
 	}
 
 	t, err := template.ParseFS(templateFS, "template/*")
@@ -177,7 +223,35 @@ func (g *Generator) Generate() error {
 		return checkpoint.From(err)
 	}
 
-	err = t.ExecuteTemplate(os.Stdout, "actions.got", data)
+	fs := afero.NewOsFs()
+
+	f, err := fs.Create(filepath.Join(g.Out, "actions.go"))
+	if err != nil {
+		return checkpoint.From(err)
+	}
+
+	var b []byte
+	buf := bytes.NewBuffer(b)
+	err = t.ExecuteTemplate(buf, "actions.got", data)
+	if err != nil {
+		return checkpoint.From(err)
+	}
+
+	fmt.Println(string(buf.Bytes()))
+
+	formatted, err := imports.Process(filepath.Join(g.Out, "actions.go"), buf.Bytes(), &imports.Options{
+		Fragment:   true,
+		AllErrors:  true,
+		Comments:   true,
+		TabIndent:  true,
+		TabWidth:   8,
+		FormatOnly: false,
+	})
+	if err != nil {
+		return checkpoint.From(err)
+	}
+
+	_, err = f.Write(formatted)
 	if err != nil {
 		return checkpoint.From(err)
 	}
@@ -198,7 +272,12 @@ func main() {
 		Import: *importPath,
 	}
 
-	err := g.Search()
+	err := g.Clean()
+	if err != nil {
+		panic(err)
+	}
+
+	err = g.Search()
 	if err != nil {
 		panic(err)
 	}
