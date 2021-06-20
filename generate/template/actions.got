@@ -59,21 +59,16 @@ func (h *HostActions) {{ .Name }}(args {{ .Name }}Request, reply *{{ .Name }}Res
 	return nil
 }
 
-func (c *ClientActions) {{ .Name }}({{ if .Response }}
+func (c *ClientActions) {{ .Name }}({{ if .Request }}
 	{{ range .Request }}{{ .Name }} {{ .Type }},
 {{ end }}
-{{ end }}) {{ if .Response }}{{ .Name }}Response{{ end }} {
+{{ end }}) {{ if .Response }}({{ range .Response }}{{ .Name }} {{ .Type }}{{ end }}, err error){{ else }}error{{ end }} {
 	// Calling from the plugin.
 	response := {{ .Name }}Response{}
-	err := c.client.Call("{{ .Name }}", {{ .Name }}Request{
+	err {{ if not .Response }}:{{ end }}= c.client.Call("{{ .Name }}", {{ .Name }}Request{
 		{{ range .Request }}{{ .NamePublic }}: {{ .Name }},
 {{ end }}
 	}, &response)
-	if err != nil {
-		panic(err)
-	}
-{{ if .Response }}
-	return response
-{{ end }}
+	return {{ if .Response }}{{ range .Response }}response.{{ .NamePublic }}{{ end }}, {{ end }}err
 }
 {{ end }}

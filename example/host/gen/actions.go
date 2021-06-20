@@ -57,18 +57,13 @@ func (h *HostActions) GetRandomInt(args GetRandomIntRequest, reply *GetRandomInt
 func (c *ClientActions) GetRandomInt(
 	n int,
 
-) GetRandomIntResponse {
+) (res0 int, err error) {
 	// Calling from the plugin.
 	response := GetRandomIntResponse{}
-	err := c.client.Call("GetRandomInt", GetRandomIntRequest{
+	err = c.client.Call("GetRandomInt", GetRandomIntRequest{
 		N: n,
 	}, &response)
-	if err != nil {
-		panic(err)
-	}
-
-	return response
-
+	return response.Res0, err
 }
 
 type PrintHelloRequest struct {
@@ -88,12 +83,9 @@ func (h *HostActions) PrintHello(args PrintHelloRequest, reply *PrintHelloRespon
 	return nil
 }
 
-func (c *ClientActions) PrintHello() {
+func (c *ClientActions) PrintHello() error {
 	// Calling from the plugin.
 	response := PrintHelloResponse{}
 	err := c.client.Call("PrintHello", PrintHelloRequest{}, &response)
-	if err != nil {
-		panic(err)
-	}
-
+	return err
 }
