@@ -8,6 +8,7 @@ import (
 // HostActions contains the host-implementations of actions.
 type HostActions struct {
 	ref0 actions0.App
+	ref1 actions0.App
 }
 
 type ClientActions struct {
@@ -33,21 +34,23 @@ type GetRandomIntRequest struct {
 }
 
 type GetRandomIntResponse struct {
-	Rand int `json:"rand"`
+	Res0 int `json:"res0"`
 }
 
 func (h *HostActions) GetRandomInt(args GetRandomIntRequest, reply *GetRandomIntResponse) error {
 	// Host implementation.
-	rand, err := h.ref0.GetRandomInt(
+	res0, err := h.ref0.GetRandomInt(
 		args.N,
 	)
+
 	if err != nil {
 		return err
 	}
 
 	*reply = GetRandomIntResponse{
-		Rand: rand,
+		Res0: res0,
 	}
+
 	return nil
 }
 
@@ -65,4 +68,32 @@ func (c *ClientActions) GetRandomInt(
 	}
 
 	return response
+
+}
+
+type PrintHelloRequest struct {
+}
+
+type PrintHelloResponse struct {
+}
+
+func (h *HostActions) PrintHello(args PrintHelloRequest, reply *PrintHelloResponse) error {
+	// Host implementation.
+	err := h.ref1.PrintHello()
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *ClientActions) PrintHello() {
+	// Calling from the plugin.
+	response := PrintHelloResponse{}
+	err := c.client.Call("PrintHello", PrintHelloRequest{}, &response)
+	if err != nil {
+		panic(err)
+	}
+
 }

@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -17,4 +18,10 @@ func (a App) GetRandomInt(n int) (int, error) {
 	}
 
 	return rand.Intn(n), nil
+}
+
+//goplug:generate
+func (a App) PrintHello() error {
+	fmt.Println("Hellooooooo")
+	return nil
 }

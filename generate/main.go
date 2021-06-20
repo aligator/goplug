@@ -296,16 +296,11 @@ func (g *Generator) Generate() error {
 
 		// Generate actions.
 		actionData := Action{
-			Name:    action.fn.Name.Name,
-			Ref:     refName,
-			Request: []Param{},
-			Response: []Param{{
-				Name:       "rand",
-				NamePublic: "Rand",
-				Type:       "int",
-			}},
+			Name: action.fn.Name.Name,
+			Ref:  refName,
 		}
 
+		// Add parameters.
 		for _, param := range action.fn.Type.Params.List {
 			var paramType string
 
@@ -334,6 +329,54 @@ func (g *Generator) Generate() error {
 				Name:       param.Names[0].Name,
 				NamePublic: strings.ToUpper(string(param.Names[0].Name[0])) + param.Names[0].Name[1:],
 				Type:       paramType,
+			})
+
+		}
+
+		// Add response.
+		// TODO: remove code duplication with for above
+		for i, res := range action.fn.Type.Results.List {
+			if i == len(action.fn.Type.Results.List)-1 {
+				// As the last return type has to be an error and that
+				// is handled separately, ignore it.
+				// TODO: Add check if the last is really an error
+				break
+			}
+
+			var resType string
+
+			switch v := res.Type.(type) {
+			case *ast.Ident:
+				resType = v.Name
+				if v.Obj != nil {
+					// It is a object, not a standard type (like int, string, ...)
+					resType = fakeName + "." + resType
+				}
+			case *ast.StarExpr:
+				resType = v.X.(*ast.Ident).Name
+			case *ast.SelectorExpr:
+				// It is a reference to another type.
+				fakeName, err := addImport(v.X.(*ast.Ident).Name, action.imports)
+				if err != nil {
+					return checkpoint.From(err)
+				}
+				resType = fakeName + "." + v.Sel.Name
+
+			default:
+				return checkpoint.From(errors.New("res type not supported"))
+			}
+
+			name := ""
+			if len(res.Names) >= 1 {
+				name = res.Names[0].Name
+			} else {
+				name = "res" + strconv.Itoa(i)
+			}
+
+			actionData.Response = append(actionData.Response, Param{
+				Name:       name,
+				NamePublic: strings.ToUpper(string(name[0])) + name[1:],
+				Type:       resType,
 			})
 
 		}

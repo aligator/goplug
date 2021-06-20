@@ -8,7 +8,8 @@ import (
 
 // HostActions contains the host-implementations of actions.
 type HostActions struct {
-	{{ range .References }}{{ .Name }} {{ .Type }}{{ end }}
+	{{ range .References }}{{ .Name }} {{ .Type }}
+	{{ end }}
 }
 
 type ClientActions struct {
@@ -41,25 +42,27 @@ type {{ .Name }}Response struct {
 
 func (h *HostActions) {{ .Name }}(args {{ .Name }}Request, reply *{{ .Name }}Response) error {
 	// Host implementation.
-	{{ range .Response }}{{ .Name }},{{ end }} err := h.{{ .Ref }}.{{ .Name }}(
-	{{ range .Request }}args.{{ .NamePublic }},
-{{ end }}
-	)
+	{{ if .Response }}{{ range .Response }}{{ .Name }},{{ end }}{{ end }} err := h.{{ .Ref }}.{{ .Name }}({{ if not .Request }}){{ else }}
+		{{ range .Request }}args.{{ .NamePublic }},
+	{{ end }})
+	{{ end }}
+
 	if err != nil {
 		return err
 	}
-
+	{{ if .Response }}
 	*reply = {{ .Name }}Response{
 		{{ range .Response }}{{ .NamePublic }}: {{ .Name }},
 {{ end }}
 	}
+	{{ end }}
 	return nil
 }
 
-func (c *ClientActions) {{ .Name }}(
+func (c *ClientActions) {{ .Name }}({{ if .Response }}
 	{{ range .Request }}{{ .Name }} {{ .Type }},
 {{ end }}
-) {{ .Name }}Response {
+{{ end }}) {{ if .Response }}{{ .Name }}Response{{ end }} {
 	// Calling from the plugin.
 	response := {{ .Name }}Response{}
 	err := c.client.Call("{{ .Name }}", {{ .Name }}Request{
@@ -69,7 +72,8 @@ func (c *ClientActions) {{ .Name }}(
 	if err != nil {
 		panic(err)
 	}
-
+{{ if .Response }}
 	return response
+{{ end }}
 }
 {{ end }}
