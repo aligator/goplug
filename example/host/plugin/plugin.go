@@ -30,7 +30,7 @@ func New(info goplug.PluginInfo) Plugin {
 	}
 }
 
-// SetSubCommand - for this example support only one subcommand.
+// SetSubCommand - for this example support only one subcommand per plugin.
 // This is host implementation specific
 func (p *Plugin) SetSubCommand(name string, subCommand func(args []string) error) error {
 	meta := TestMetadata{

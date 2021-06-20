@@ -4,9 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/aligator/checkpoint"
-	"github.com/aligator/goplug/common"
-	"github.com/aligator/goplug/errutil"
 	"io/fs"
 	"io/ioutil"
 	"log"
@@ -16,6 +13,10 @@ import (
 	"os/exec"
 	"path"
 	"sync"
+
+	"github.com/aligator/checkpoint"
+	"github.com/aligator/goplug/common"
+	"github.com/aligator/goplug/errutil"
 )
 
 type PluginType string
@@ -57,8 +58,9 @@ type GoPlug struct {
 	Host         Host
 	Actions      interface{}
 
-	plugins        []plugin
-	oneShotPlugins map[string]*plugin
+	plugins             []plugin
+	oneShotPlugins      map[string]*plugin
+	oneShotPluginsMutex sync.Mutex
 }
 
 func isValidPlugin(info fs.FileInfo) bool {
@@ -85,7 +87,9 @@ func (g *GoPlug) Init() error {
 		return err
 	}
 
+	g.oneShotPluginsMutex.Lock()
 	g.oneShotPlugins = make(map[string]*plugin)
+	g.oneShotPluginsMutex.Unlock()
 
 	errCh := make(chan error)
 	allErrorsCh := errutil.Collect(errCh)
@@ -128,7 +132,10 @@ func (g *GoPlug) Init() error {
 				return
 			}
 
+			g.oneShotPluginsMutex.Lock()
 			g.oneShotPlugins[p.ID] = &p
+			g.oneShotPluginsMutex.Unlock()
+
 			err = g.Host.RegisterOneShot(p.PluginInfo, func(args []string) error {
 				// Run
 				return g.oneShot(p.ID, args)
