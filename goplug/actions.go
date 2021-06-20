@@ -1,12 +1,21 @@
 package goplug
 
-import "fmt"
+import (
+	"fmt"
+)
+
+type PrintHelloRequest struct {
+	Text string
+}
+
+type PrintHelloResponse struct{}
 
 type HostControl struct {
 	GoPlug GoPlug
 }
 
-func (a *HostControl) Print(args string, reply *interface{}) error {
-	_, err := fmt.Print(args)
+func (h *HostControl) Print(args PrintHelloRequest, reply *PrintHelloResponse) error {
+	// Host implementation.
+	_, err := fmt.Println(args.Text)
 	return err
 }

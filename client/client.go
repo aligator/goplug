@@ -47,6 +47,11 @@ func (p *Client) Call(serviceMethod string, args interface{}, reply interface{})
 	return p.client.Call("Host."+serviceMethod, args, reply)
 }
 
-func (p *Client) Print(text string) error {
-	return p.client.Call("HostControl.Print", text, nil)
+func (c *Client) Print(text string) error {
+	// Calling from the plugin.
+	response := goplug.PrintHelloResponse{}
+	err := c.client.Call("HostControl.Print", goplug.PrintHelloRequest{
+		Text: text,
+	}, &response)
+	return err
 }

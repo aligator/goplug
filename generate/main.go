@@ -257,7 +257,7 @@ func (g *Generator) Generate() error {
 	}
 
 	// Add references
-	for i, action := range g.found {
+	for _, action := range g.found {
 		// Get the receiver.
 		if action.fn.Recv == nil || action.fn.Recv.NumFields() < 1 {
 			continue
@@ -274,7 +274,6 @@ func (g *Generator) Generate() error {
 			return checkpoint.From(errors.New("receiver type not supported"))
 		}
 
-		fmt.Println(rcvTargetName)
 		importPath := filepath.Join(g.Import, action.path)
 		fakeName, err := addImport(importPath, []Import{
 			{
@@ -287,12 +286,23 @@ func (g *Generator) Generate() error {
 			return checkpoint.From(err)
 		}
 
-		refName := "ref" + strconv.Itoa(i)
+		refName := strings.ToUpper(string(fakeName[0])) + fakeName[1:] + rcvTargetName + "Ref"
 		refType := fakeName + "." + rcvTargetName
-		data.References = append(data.References, Reference{
-			Name: refName,
-			Type: refType,
-		})
+
+		found := false
+		for _, ref := range data.References {
+			if ref.Name == refName {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			data.References = append(data.References, Reference{
+				Name: refName,
+				Type: refType,
+			})
+		}
 
 		// Generate actions.
 		actionData := Action{

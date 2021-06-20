@@ -7,8 +7,7 @@ import (
 
 // HostActions contains the host-implementations of actions.
 type HostActions struct {
-	ref0 actions0.App
-	ref1 actions0.App
+	Actions0AppRef *actions0.App
 }
 
 type ClientActions struct {
@@ -23,8 +22,8 @@ func NewClientActions(plugin *client.Client) ClientActions {
 
 // Make some plugin-methods available to the plugins.
 
-func (c *ClientActions) Print(text string) {
-	c.client.Print(text)
+func (c *ClientActions) Print(text string) error {
+	return c.client.Print(text)
 }
 
 // Action implementations for host and client.
@@ -39,7 +38,7 @@ type GetRandomIntResponse struct {
 
 func (h *HostActions) GetRandomInt(args GetRandomIntRequest, reply *GetRandomIntResponse) error {
 	// Host implementation.
-	res0, err := h.ref0.GetRandomInt(
+	res0, err := h.Actions0AppRef.GetRandomInt(
 		args.N,
 	)
 
@@ -74,7 +73,7 @@ type PrintHelloResponse struct {
 
 func (h *HostActions) PrintHello(args PrintHelloRequest, reply *PrintHelloResponse) error {
 	// Host implementation.
-	err := h.ref1.PrintHello()
+	err := h.Actions0AppRef.PrintHello()
 
 	if err != nil {
 		return err

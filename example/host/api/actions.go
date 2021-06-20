@@ -3,15 +3,17 @@ package actions
 import (
 	"fmt"
 	"math/rand"
+	"strconv"
 	"time"
 )
 
 type App struct {
-	isSeeded bool
+	isSeeded  bool
+	lastHello int
 }
 
 //goplug:generate
-func (a App) GetRandomInt(n int) (int, error) {
+func (a *App) GetRandomInt(n int) (int, error) {
 	if !a.isSeeded {
 		rand.Seed(time.Now().UnixNano())
 		a.isSeeded = true
@@ -21,7 +23,8 @@ func (a App) GetRandomInt(n int) (int, error) {
 }
 
 //goplug:generate
-func (a App) PrintHello() error {
-	fmt.Println("Hellooooooo")
+func (a *App) PrintHello() error {
+	fmt.Println("Hellooooooo", strconv.Itoa(a.lastHello))
+	a.lastHello++
 	return nil
 }

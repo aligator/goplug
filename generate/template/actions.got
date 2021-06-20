@@ -8,7 +8,7 @@ import (
 
 // HostActions contains the host-implementations of actions.
 type HostActions struct {
-	{{ range .References }}{{ .Name }} {{ .Type }}
+	{{ range .References }}{{ .Name }} *{{ .Type }}
 	{{ end }}
 }
 
@@ -24,8 +24,8 @@ func NewClientActions(plugin *client.Client) ClientActions {
 
 // Make some plugin-methods available to the plugins.
 
-func (c *ClientActions) Print(text string) {
-	c.client.Print(text)
+func (c *ClientActions) Print(text string) error {
+	return c.client.Print(text)
 }
 
 // Action implementations for host and client.

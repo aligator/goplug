@@ -1,6 +1,8 @@
 package common
 
-import "io"
+import (
+	"io"
+)
 
 type CombinedReadWriter struct {
 	In  io.ReadCloser
