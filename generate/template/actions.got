@@ -2,8 +2,8 @@ package {{ .Package }}
 
 import (
 	"github.com/aligator/goplug/client"
-	{{ range .Imports }}{{ .Name }} "{{ .Path }}"
-{{ end }}
+	{{ range .Imports }}{{ .FakeName }} "{{ .Path }}"
+	{{ end }}
 )
 
 // HostActions contains the host-implementations of actions.
@@ -73,33 +73,3 @@ func (c *ClientActions) {{ .Name }}(
 	return response
 }
 {{ end }}
-
-/*type GetRandomIntRequest struct {
-	N int `json:"n"`
-}
-
-type GetRandomIntResponse struct {
-	Rand int `json:"rand"`
-}
-
-func (h *HostActions) GetRandomInt(args GetRandomIntRequest, reply *GetRandomIntResponse) error {
-	// Host implementation.
-	*reply = GetRandomIntResponse{
-		Rand: rand.Intn(args.N),
-	}
-	return nil
-}
-
-func (c *ClientActions) GetRandomInt(n int) int {
-	// Calling from the plugin.
-	response := GetRandomIntResponse{}
-	err := c.client.Call("GetRandomInt", GetRandomIntRequest{
-		N: n,
-	}, &response)
-	if err != nil {
-		panic(err)
-	}
-
-	return response.Rand
-}
-*/

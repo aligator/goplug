@@ -3,8 +3,6 @@ package actions
 import (
 	"math/rand"
 	"time"
-
-	"github.com/aligator/goplug/example/host/lol"
 )
 
 type App struct {
@@ -12,11 +10,11 @@ type App struct {
 }
 
 //goplug:generate
-func (a App) GetRandomInt(n some.Test) (int, error) {
+func (a App) GetRandomInt(n int) (int, error) {
 	if !a.isSeeded {
 		rand.Seed(time.Now().UnixNano())
 		a.isSeeded = true
 	}
 
-	return rand.Intn(n.N), nil
+	return rand.Intn(n), nil
 }

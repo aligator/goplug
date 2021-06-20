@@ -10,22 +10,26 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"text/template"
 
 	"github.com/aligator/checkpoint"
 	"github.com/spf13/afero"
-	"golang.org/x/tools/imports"
+	"golang.org/x/tools/go/packages"
 )
 
 type match struct {
-	fn   *ast.FuncDecl
-	pack *ast.Package
-	file *ast.File
-	path string
+	fn       *ast.FuncDecl
+	pack     *ast.Package
+	file     *ast.File
+	path     string
+	fullPath string
+	imports  []Import
 }
 
 type Generator struct {
@@ -61,7 +65,8 @@ func (g *Generator) Clean() error {
 
 func (g *Generator) Search() error {
 	fset := token.NewFileSet()
-	return fs.WalkDir(os.DirFS(g.In), ".", func(path string, d fs.DirEntry, err error) error {
+
+	err := fs.WalkDir(os.DirFS(g.In), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -86,10 +91,11 @@ func (g *Generator) Search() error {
 						for _, c := range funcDecl.Doc.List {
 							if strings.HasPrefix(c.Text, "//goplug:generate") {
 								g.found = append(g.found, match{
-									fn:   funcDecl,
-									pack: p,
-									file: f,
-									path: path,
+									fn:       funcDecl,
+									pack:     p,
+									file:     f,
+									path:     path,
+									fullPath: fullPath,
 								})
 								break
 							}
@@ -100,6 +106,64 @@ func (g *Generator) Search() error {
 		}
 		return nil
 	})
+
+	if err != nil {
+		return err
+	}
+
+	// Run type checker
+	cfg := &packages.Config{
+		Mode: packages.NeedImports | packages.NeedTypes | packages.NeedSyntax | packages.NeedName | packages.NeedModule,
+		Dir:  ".",
+		Fset: fset,
+	}
+
+	for foundI, found := range g.found {
+		pkgs, err := packages.Load(cfg, "./"+found.fullPath)
+
+		if err != nil {
+			return checkpoint.From(err)
+		}
+		if packages.PrintErrors(pkgs) > 0 {
+			return nil
+		}
+
+		// Print the names of the source files
+		// for each package listed on the command line.
+		for _, pkg := range pkgs {
+			// Read the module path (if it is not set explicitly).
+			fmt.Println(pkg.Module.Path)
+			if g.Import == "" {
+				g.Import = filepath.Join(pkg.Module.Path, g.In)
+			}
+
+			for _, imp := range pkg.Imports {
+				// Find the import in found to get the fake names. They are somehow not loaded with packages.Load...
+				fakeName := ""
+				for _, foundImp := range found.file.Imports {
+					if foundImp.Path.Value != "\""+imp.PkgPath+"\"" {
+						continue
+					}
+
+					if foundImp.Name != nil {
+						fakeName = foundImp.Name.Name
+					}
+				}
+
+				g.found[foundI].imports = append(g.found[foundI].imports, Import{
+					FakeName: fakeName,
+					Path:     imp.PkgPath,
+					Name:     imp.Name,
+				})
+			}
+		}
+	}
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return nil
 }
 
 type Param struct {
@@ -121,8 +185,9 @@ type Reference struct {
 }
 
 type Import struct {
-	Name string
-	Path string
+	FakeName string
+	Name     string
+	Path     string
 }
 
 type PluginData struct {
@@ -138,6 +203,57 @@ var templateFS embed.FS
 func (g *Generator) Generate() error {
 	data := PluginData{
 		Package: "plug",
+	}
+
+	var importCounter int32 = 0
+
+	imports := make(map[string]Import)
+	// addImport adds the given name or path to the imports.
+	// If fileImports is given it is used to resolve it.
+	// If nameOrPath is a name the fileImports are mandatory, to resolve it.
+	addImport := func(nameOrPath string, fileImports []Import) (string, error) {
+		// First get the path behind it if possible.
+		var match Import
+		if fileImports != nil {
+			for _, i := range fileImports {
+				if i.FakeName == nameOrPath || i.Name == nameOrPath || strings.HasSuffix(i.Path, nameOrPath) || i.Path == nameOrPath {
+					match = i
+					// If the file is valid go, there can only be one exact match.
+					break
+				}
+			}
+		} else {
+			// In this case it must be a path.
+			match = Import{
+				FakeName: "",
+				Name:     filepath.Base(nameOrPath),
+				Path:     nameOrPath,
+			}
+		}
+
+		if match == (Import{}) {
+			return "", errors.New("could not find the import")
+		}
+
+		// Check if it is already set.
+		if i, ok := imports[match.Path]; !ok {
+			fakeName := match.Name
+			// Make sure it is unique.
+			count := atomic.LoadInt32(&importCounter)
+			fakeName += strconv.Itoa(int(count))
+			atomic.AddInt32(&importCounter, 1)
+
+			// If not, create it.
+			imports[match.Path] = Import{
+				FakeName: fakeName,
+				Name:     match.Name,
+				Path:     match.Path,
+			}
+
+			return imports[match.Path].FakeName, nil
+		} else {
+			return i.FakeName, nil
+		}
 	}
 
 	// Add references
@@ -159,19 +275,23 @@ func (g *Generator) Generate() error {
 		}
 
 		fmt.Println(rcvTargetName)
+		importPath := filepath.Join(g.Import, action.path)
+		fakeName, err := addImport(importPath, []Import{
+			{
+				FakeName: "",
+				Name:     action.pack.Name,
+				Path:     importPath,
+			},
+		})
+		if err != nil {
+			return checkpoint.From(err)
+		}
 
 		refName := "ref" + strconv.Itoa(i)
-		// TODO: resolve package name collision (maybe just use a name for its import) (see also bellow)
-		refType := action.pack.Name + "." + rcvTargetName
+		refType := fakeName + "." + rcvTargetName
 		data.References = append(data.References, Reference{
 			Name: refName,
 			Type: refType,
-		})
-
-		// TODO: filter double imports
-		data.Imports = append(data.Imports, Import{
-			Name: "", // Todo: name it with a definitely unique name to be sure.
-			Path: filepath.Join(g.Import, action.path),
 		})
 
 		// Generate actions.
@@ -194,15 +314,18 @@ func (g *Generator) Generate() error {
 				paramType = v.Name
 				if v.Obj != nil {
 					// It is a object, not a standard type (like int, string, ...)
-					// TODO: resolve package name collision (maybe just use a name for its import) (see also above)
-					paramType = action.pack.Name + "." + paramType
+					paramType = fakeName + "." + paramType
 				}
 			case *ast.StarExpr:
 				paramType = v.X.(*ast.Ident).Name
 			case *ast.SelectorExpr:
 				// It is a reference to another type.
-				paramType = v.X.(*ast.Ident).Name + "." + v.Sel.Name
-				// ToDo: Try to find out the import used for that if it is not in the same package.
+				fakeName, err := addImport(v.X.(*ast.Ident).Name, action.imports)
+				if err != nil {
+					return checkpoint.From(err)
+				}
+				paramType = fakeName + "." + v.Sel.Name
+
 			default:
 				return checkpoint.From(errors.New("param type not supported"))
 			}
@@ -216,6 +339,10 @@ func (g *Generator) Generate() error {
 		}
 
 		data.Actions = append(data.Actions, actionData)
+	}
+
+	for _, imp := range imports {
+		data.Imports = append(data.Imports, imp)
 	}
 
 	t, err := template.ParseFS(templateFS, "template/*")
@@ -236,22 +363,22 @@ func (g *Generator) Generate() error {
 	if err != nil {
 		return checkpoint.From(err)
 	}
+	/*
+		fmt.Println(string(buf.Bytes()))
 
-	fmt.Println(string(buf.Bytes()))
+		formatted, err := imports.Process(filepath.Join(g.Out, "actions.go"), buf.Bytes(), &imports.Options{
+			Fragment:   true,
+			AllErrors:  true,
+			Comments:   true,
+			TabIndent:  true,
+			TabWidth:   8,
+			FormatOnly: false,
+		})
+		if err != nil {
+			return checkpoint.From(err)
+		}*/
 
-	formatted, err := imports.Process(filepath.Join(g.Out, "actions.go"), buf.Bytes(), &imports.Options{
-		Fragment:   true,
-		AllErrors:  true,
-		Comments:   true,
-		TabIndent:  true,
-		TabWidth:   8,
-		FormatOnly: false,
-	})
-	if err != nil {
-		return checkpoint.From(err)
-	}
-
-	_, err = f.Write(formatted)
+	_, err = f.Write(buf.Bytes())
 	if err != nil {
 		return checkpoint.From(err)
 	}
