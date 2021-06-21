@@ -1,8 +1,8 @@
 package plug
 
 import (
-	"github.com/aligator/goplug/client"
 	actions0 "github.com/aligator/goplug/example/host/api"
+	"github.com/aligator/goplug/goplug"
 )
 
 // HostActions contains the host-implementations of actions.
@@ -11,12 +11,12 @@ type HostActions struct {
 }
 
 type ClientActions struct {
-	client *client.Client
+	client *goplug.Client
 }
 
-func NewClientActions(plugin *client.Client) ClientActions {
+func NewClientActions(client *goplug.Client) ClientActions {
 	return ClientActions{
-		client: plugin,
+		client: client,
 	}
 }
 

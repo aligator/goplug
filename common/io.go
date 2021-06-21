@@ -4,6 +4,9 @@ import (
 	"io"
 )
 
+// CombinedReadWriter just combines a Reader with a writer and
+// therefore implements the ReadWriteCloser interface.
+// All actions are just passed to the respective implementation.
 type CombinedReadWriter struct {
 	In  io.ReadCloser
 	Out io.WriteCloser

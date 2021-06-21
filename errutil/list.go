@@ -9,6 +9,9 @@ var (
 	ErrCumulated = errors.New("several errors happened")
 )
 
+// ErrorList is a special error which
+// just combines any amount of errors to one.
+// It is fully compatible with errors.Is and errors.As.
 type ErrorList []error
 
 func (e ErrorList) Error() string {
@@ -39,7 +42,9 @@ func (e ErrorList) As(target interface{}) bool {
 
 // Collect errors as long as the errCh is open.
 // When it gets closed it sends all errors to the resulting channel
-// as one slice and closes that channel also.
+// as one combined error and closes that channel also.
+// The resulting error is an ErrorList and therefore
+// supports errors.Is and errors.As for all collected errors.
 func Collect(errCh <-chan error) <-chan error {
 	allCh := make(chan error)
 	go func() {
