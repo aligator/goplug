@@ -354,7 +354,25 @@ func (g *Generator) Generate() error {
 					paramType = fakeName + "." + paramType
 				}
 			case *ast.StarExpr:
-				paramType = v.X.(*ast.Ident).Name
+				// Todo: this part may need rework...
+				switch target := v.X.(type) {
+				case *ast.Ident:
+					paramType = target.Name
+					if target.Obj != nil {
+						// It is a object, not a standard type (like int, string, ...)
+						paramType = fakeName + "." + paramType
+					}
+					// It is a reference to another type.
+					paramType = "*" + paramType
+				case *ast.SelectorExpr:
+					// It is a reference to another type from another package.
+					fakeName, err := addImport(target.X.(*ast.Ident).Name, action.imports)
+					if err != nil {
+						return checkpoint.From(err)
+					}
+					paramType = "*" + fakeName + "." + target.Sel.Name
+				}
+
 			case *ast.SelectorExpr:
 				// It is a reference to another type.
 				fakeName, err := addImport(v.X.(*ast.Ident).Name, action.imports)
@@ -395,9 +413,26 @@ func (g *Generator) Generate() error {
 					resType = fakeName + "." + resType
 				}
 			case *ast.StarExpr:
-				resType = v.X.(*ast.Ident).Name
+				switch target := v.X.(type) {
+				case *ast.Ident:
+					resType = target.Name
+					if target.Obj != nil {
+						// It is a object, not a standard type (like int, string, ...)
+						resType = fakeName + "." + resType
+					}
+					// It is a reference to another type.
+					resType = "*" + resType
+				case *ast.SelectorExpr:
+					// It is a reference to another type from another package.
+					fakeName, err := addImport(target.X.(*ast.Ident).Name, action.imports)
+					if err != nil {
+						return checkpoint.From(err)
+					}
+					resType = "*" + fakeName + "." + target.Sel.Name
+				}
+
 			case *ast.SelectorExpr:
-				// It is a reference to another type.
+				// It is a reference to another type from another package.
 				fakeName, err := addImport(v.X.(*ast.Ident).Name, action.imports)
 				if err != nil {
 					return checkpoint.From(err)
