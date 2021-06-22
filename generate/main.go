@@ -6,25 +6,23 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/aligator/checkpoint"
+	"github.com/spf13/afero"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"golang.org/x/tools/go/packages"
 	"io/fs"
-	"log"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"text/template"
-
-	"github.com/aligator/checkpoint"
-	"github.com/spf13/afero"
-	"golang.org/x/tools/go/packages"
 )
 
 type match struct {
 	fn       *ast.FuncDecl
+	comment  string
 	pack     *ast.Package
 	file     *ast.File
 	path     string
@@ -36,26 +34,28 @@ type Generator struct {
 	Out    string
 	In     string
 	Import string
+	Pack   string
+	FS     afero.Fs
 
-	found []match
+	found     []match
+	generated *PluginData
 }
 
-func (g *Generator) Clean() error {
-	fs := afero.NewOsFs()
-	// Generate the plugin file.
-
+// CleanDestination removes the whole destination folder (if it exists)
+// and re-creates a new empty folder.
+func (g *Generator) CleanDestination() error {
 	// Check if folder exists. If it already exists, delete it.
-	if _, err := fs.Stat(g.Out); err == nil {
-		err := fs.RemoveAll(g.Out)
+	if _, err := g.FS.Stat(g.Out); err == nil {
+		err := g.FS.RemoveAll(g.Out)
 		if err != nil {
 			return checkpoint.From(err)
 		}
-	} else if err != nil && !errors.Is(err, afero.ErrFileNotFound) {
+	} else if !errors.Is(err, afero.ErrFileNotFound) {
 		return checkpoint.From(err)
 	}
 
 	// Re-create it.
-	err := fs.Mkdir(g.Out, 0777)
+	err := g.FS.Mkdir(g.Out, 0777)
 	if err != nil {
 		return checkpoint.From(err)
 	}
@@ -63,42 +63,73 @@ func (g *Generator) Clean() error {
 	return nil
 }
 
+// Search for the '//goplug:generate annotation' in the code and try to get all
+// needed information about the methods annotated by them.
 func (g *Generator) Search() error {
 	fset := token.NewFileSet()
 
-	err := fs.WalkDir(os.DirFS(g.In), ".", func(path string, d fs.DirEntry, err error) error {
+	absIn, err := filepath.Abs(g.In)
+	if err != nil {
+		return checkpoint.From(err)
+	}
+
+	// Walk all dirs of the input project
+	err = afero.Walk(g.FS, absIn, func(fullPath string, info fs.FileInfo, err error) error {
 		if err != nil {
-			return err
+			return checkpoint.From(err)
 		}
 
-		fullPath := filepath.Join(g.In, path)
+		if !info.IsDir() {
+			return nil
+		}
 
-		if d.IsDir() {
-			pkgs, err := parser.ParseDir(fset, fullPath, nil, parser.ParseComments)
+		packagePath := filepath.Base(fullPath)
 
-			if err != nil {
-				return err
-			}
+		// Parse the dir as package
+		pkgs, err := parser.ParseDir(fset, fullPath, nil, parser.ParseComments)
+		if err != nil {
+			return checkpoint.From(err)
+		}
 
-			for _, p := range pkgs {
-				for _, f := range p.Files {
-					for _, d := range f.Decls {
-						funcDecl, ok := d.(*ast.FuncDecl)
-						if !ok || funcDecl.Doc == nil {
-							continue
-						}
+		// Run through everything and find the prefix.
+		for _, p := range pkgs {
+			for _, f := range p.Files {
+				for _, d := range f.Decls {
+					// Only functions are interesting.
+					funcDecl, ok := d.(*ast.FuncDecl)
+					if !ok || funcDecl.Doc == nil {
+						continue
+					}
 
-						for _, c := range funcDecl.Doc.List {
-							if strings.HasPrefix(c.Text, "//goplug:generate") {
-								g.found = append(g.found, match{
-									fn:       funcDecl,
-									pack:     p,
-									file:     f,
-									path:     path,
-									fullPath: fullPath,
-								})
-								break
+					for _, c := range funcDecl.Doc.List {
+						if strings.HasPrefix(c.Text, "//goplug:generate") {
+							// Re-generate the comment
+							comment := ""
+							for _, c := range funcDecl.Doc.List {
+								// Ignore all lines which do not start with "// "
+								// as these are normally comment directives like
+								// "//line" and "//go:noinline".
+								// This also prevents adding "//goplug:generate".
+								if !strings.HasPrefix(c.Text, "// ") {
+									continue
+								}
+
+								if comment != "" {
+									comment += "\n"
+								}
+
+								comment += c.Text
 							}
+
+							g.found = append(g.found, match{
+								fn:       funcDecl,
+								comment:  comment,
+								pack:     p,
+								file:     f,
+								path:     packagePath,
+								fullPath: fullPath,
+							})
+							break
 						}
 					}
 				}
@@ -111,16 +142,18 @@ func (g *Generator) Search() error {
 		return err
 	}
 
-	// Run type checker
+	// Run type checker because otherwise I could not resolve imports needed
+	// by params / result values used by the annotated functions.
+	// Maybe there is a way to combine the logic above with the type checker,
+	// but for now it works.
 	cfg := &packages.Config{
 		Mode: packages.NeedImports | packages.NeedTypes | packages.NeedSyntax | packages.NeedName | packages.NeedModule,
-		Dir:  ".",
+		Dir:  absIn,
 		Fset: fset,
 	}
 
 	for foundI, found := range g.found {
-		pkgs, err := packages.Load(cfg, "./"+found.fullPath)
-
+		pkgs, err := packages.Load(cfg, found.fullPath)
 		if err != nil {
 			return checkpoint.From(err)
 		}
@@ -128,17 +161,18 @@ func (g *Generator) Search() error {
 			return nil
 		}
 
-		// Print the names of the source files
-		// for each package listed on the command line.
 		for _, pkg := range pkgs {
 			// Read the module path (if it is not set explicitly).
-			fmt.Println(pkg.Module.Path)
+			// That is needed to compose the import paths correctly.
+			// This is only done once.
 			if g.Import == "" {
-				g.Import = filepath.Join(pkg.Module.Path, g.In)
+				g.Import = pkg.Module.Path
 			}
 
 			for _, imp := range pkg.Imports {
-				// Find the import in found to get the fake names. They are somehow not loaded with packages.Load...
+				// Find the import in found to get the fake names.
+				// (e.g. named imports)
+				// They are somehow not loaded with packages.Load...
 				fakeName := ""
 				for _, foundImp := range found.file.Imports {
 					if foundImp.Path.Value != "\""+imp.PkgPath+"\"" {
@@ -150,6 +184,7 @@ func (g *Generator) Search() error {
 					}
 				}
 
+				// Add the information learned.
 				g.found[foundI].imports = append(g.found[foundI].imports, Import{
 					FakeName: fakeName,
 					Path:     imp.PkgPath,
@@ -158,11 +193,6 @@ func (g *Generator) Search() error {
 			}
 		}
 	}
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	return nil
 }
 
@@ -174,6 +204,7 @@ type Param struct {
 
 type Action struct {
 	Name     string
+	Comment  string
 	Ref      string
 	Request  []Param
 	Response []Param
@@ -197,14 +228,14 @@ type PluginData struct {
 	Actions    []Action
 }
 
-//go:embed template
-var templateFS embed.FS
-
+// Generate the plugin actions file
 func (g *Generator) Generate() error {
-	data := PluginData{
-		Package: "plug",
+	g.generated = &PluginData{
+		Package: g.Pack,
 	}
 
+	// importCounter just counts the imports added to generate in any case
+	// unique imports by just appending this number.
 	var importCounter int32 = 0
 
 	imports := make(map[string]Import)
@@ -290,7 +321,7 @@ func (g *Generator) Generate() error {
 		refType := fakeName + "." + rcvTargetName
 
 		found := false
-		for _, ref := range data.References {
+		for _, ref := range g.generated.References {
 			if ref.Name == refName {
 				found = true
 				break
@@ -298,7 +329,7 @@ func (g *Generator) Generate() error {
 		}
 
 		if !found {
-			data.References = append(data.References, Reference{
+			g.generated.References = append(g.generated.References, Reference{
 				Name: refName,
 				Type: refType,
 			})
@@ -306,8 +337,9 @@ func (g *Generator) Generate() error {
 
 		// Generate actions.
 		actionData := Action{
-			Name: action.fn.Name.Name,
-			Ref:  refName,
+			Name:    action.fn.Name.Name,
+			Comment: action.comment,
+			Ref:     refName,
 		}
 
 		// Add parameters.
@@ -391,46 +423,46 @@ func (g *Generator) Generate() error {
 
 		}
 
-		data.Actions = append(data.Actions, actionData)
+		g.generated.Actions = append(g.generated.Actions, actionData)
 	}
 
 	for _, imp := range imports {
-		data.Imports = append(data.Imports, imp)
+		g.generated.Imports = append(g.generated.Imports, imp)
 	}
 
+	return nil
+}
+
+//go:embed template
+var templateFS embed.FS
+
+func (g Generator) Write() error {
+	// Get the template.
 	t, err := template.ParseFS(templateFS, "template/*")
 	if err != nil {
 		return checkpoint.From(err)
 	}
 
-	fs := afero.NewOsFs()
-
-	f, err := fs.Create(filepath.Join(g.Out, "actions.go"))
+	f, err := g.FS.Create(filepath.Join(g.Out, "actions.go"))
 	if err != nil {
 		return checkpoint.From(err)
 	}
 
+	// Generate the file to a buffer using the template.
 	var b []byte
 	buf := bytes.NewBuffer(b)
-	err = t.ExecuteTemplate(buf, "actions.got", data)
+	err = t.ExecuteTemplate(buf, "actions.got", g.generated)
 	if err != nil {
 		return checkpoint.From(err)
 	}
-	/*
-		fmt.Println(string(buf.Bytes()))
 
-		formatted, err := imports.Process(filepath.Join(g.Out, "actions.go"), buf.Bytes(), &imports.Options{
-			Fragment:   true,
-			AllErrors:  true,
-			Comments:   true,
-			TabIndent:  true,
-			TabWidth:   8,
-			FormatOnly: false,
-		})
-		if err != nil {
-			return checkpoint.From(err)
-		}*/
+	// Format it.
+	//formatted, err := format.Source(buf.Bytes())
+	//if err != nil {
+	//	return checkpoint.From(err)
+	//}
 
+	// And save it.
 	_, err = f.Write(buf.Bytes())
 	if err != nil {
 		return checkpoint.From(err)
@@ -440,33 +472,46 @@ func (g *Generator) Generate() error {
 }
 
 func main() {
-	out := flag.String("o", "", "")
-	importPath := flag.String("i", "", "")
+	out := flag.String("o", "plug", "sub-folder of the project to generate the new code into")
+	importPath := flag.String("m", "", "module path to use if it should not be the module path from the go.mod file")
+	pack := flag.String("p", "", "package name if not the same as the given output folder")
 
 	flag.Parse()
 	args := flag.Args()
 
-	g := Generator{
-		Out:    *out,
-		In:     args[0],
-		Import: *importPath,
+	// If the package is not given, just use the folder name of out
+	if *pack == "" {
+		*pack = filepath.Base(*out)
 	}
 
-	err := g.Clean()
+	g := Generator{
+		In:     args[0],
+		Out:    filepath.Join(args[0], *out),
+		Import: *importPath,
+		FS:     afero.NewOsFs(),
+		Pack:   *pack,
+	}
+
+	fmt.Printf("Clean target directory %v\n", g.Out)
+	err := g.CleanDestination()
 	if err != nil {
 		panic(err)
 	}
 
+	fmt.Println("Search for the annotation")
 	err = g.Search()
 	if err != nil {
 		panic(err)
 	}
 
-	for _, match := range g.found {
-		fmt.Println(match.path, match.pack.Name, match.fn.Name)
+	fmt.Println("Generate")
+	err = g.Generate()
+	if err != nil {
+		panic(err)
 	}
 
-	err = g.Generate()
+	fmt.Printf("Write to target directory %v\n", g.Out)
+	err = g.Write()
 	if err != nil {
 		panic(err)
 	}

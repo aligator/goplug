@@ -40,6 +40,7 @@ type {{ .Name }}Response struct {
 {{ end }}
 }
 
+{{ .Comment }}
 func (h *HostActions) {{ .Name }}(args {{ .Name }}Request, reply *{{ .Name }}Response) error {
 	// Host implementation.
 	{{ if .Response }}{{ range .Response }}{{ .Name }},{{ end }}{{ end }} err := h.{{ .Ref }}.{{ .Name }}({{ if not .Request }}){{ else }}
@@ -59,10 +60,10 @@ func (h *HostActions) {{ .Name }}(args {{ .Name }}Request, reply *{{ .Name }}Res
 	return nil
 }
 
+{{ .Comment }}
 func (c *ClientActions) {{ .Name }}({{ if .Request }}
 	{{ range .Request }}{{ .Name }} {{ .Type }},
-{{ end }}
-{{ end }}) {{ if .Response }}({{ range .Response }}{{ .Name }} {{ .Type }}{{ end }}, err error){{ else }}error{{ end }} {
+{{ end }}{{ end }}) {{ if .Response }}({{ range .Response }}{{ .Name }} {{ .Type }}{{ end }}, err error){{ else }}error{{ end }} {
 	// Calling from the plugin.
 	response := {{ .Name }}Response{}
 	err {{ if not .Response }}:{{ end }}= c.client.Call("{{ .Name }}", {{ .Name }}Request{

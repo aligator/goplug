@@ -1,4 +1,4 @@
-package plug
+package gen
 
 import (
 	actions0 "github.com/aligator/goplug/example/host/api"
@@ -36,6 +36,8 @@ type GetRandomIntResponse struct {
 	Res0 int `json:"res0"`
 }
 
+// GetRandomInt returns, a non-negative pseudo-random number in [0,n) from the
+// default Source.
 func (h *HostActions) GetRandomInt(args GetRandomIntRequest, reply *GetRandomIntResponse) error {
 	// Host implementation.
 	res0, err := h.Actions0AppRef.GetRandomInt(
@@ -53,9 +55,10 @@ func (h *HostActions) GetRandomInt(args GetRandomIntRequest, reply *GetRandomInt
 	return nil
 }
 
+// GetRandomInt returns, a non-negative pseudo-random number in [0,n) from the
+// default Source.
 func (c *ClientActions) GetRandomInt(
 	n int,
-
 ) (res0 int, err error) {
 	// Calling from the plugin.
 	response := GetRandomIntResponse{}
@@ -71,6 +74,7 @@ type PrintHelloRequest struct {
 type PrintHelloResponse struct {
 }
 
+// PrintHello to stdout
 func (h *HostActions) PrintHello(args PrintHelloRequest, reply *PrintHelloResponse) error {
 	// Host implementation.
 	err := h.Actions0AppRef.PrintHello()
@@ -82,6 +86,7 @@ func (h *HostActions) PrintHello(args PrintHelloRequest, reply *PrintHelloRespon
 	return nil
 }
 
+// PrintHello to stdout
 func (c *ClientActions) PrintHello() error {
 	// Calling from the plugin.
 	response := PrintHelloResponse{}
