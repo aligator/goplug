@@ -468,12 +468,12 @@ func (g *Generator) Generate() error {
 	return nil
 }
 
-//go:embed template
+//go:embed generate/template
 var templateFS embed.FS
 
 func (g Generator) Write() error {
 	// Get the template.
-	t, err := template.ParseFS(templateFS, "template/*")
+	t, err := template.ParseFS(templateFS, "generate/template/*")
 	if err != nil {
 		return checkpoint.From(err)
 	}
