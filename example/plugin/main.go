@@ -3,9 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strconv"
+
 	"github.com/aligator/goplug/example/host/plugin"
 	"github.com/aligator/goplug/goplug"
-	"strconv"
 )
 
 type SuperPlugin struct {
@@ -33,7 +34,12 @@ func main() {
 			return err
 		}
 
-		p.Print(fmt.Sprintf("Random result for input %v: \n%v\n", args[1], strconv.Itoa(p.GetRandomInt(parsedInt))))
+		rand, err := p.GetRandomInt(parsedInt)
+		if err != nil {
+			return err
+		}
+
+		p.Print(fmt.Sprintf("Random result for input %v: \n%v\n", args[1], strconv.Itoa(rand)))
 
 		return nil
 	})

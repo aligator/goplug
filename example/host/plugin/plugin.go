@@ -2,9 +2,10 @@ package plugin
 
 import (
 	"encoding/json"
-	"github.com/aligator/goplug/goplug"
-	"github.com/aligator/goplug/plugin"
 	"os"
+
+	plug "github.com/aligator/goplug/example/host/gen"
+	"github.com/aligator/goplug/goplug"
 )
 
 type TestMetadata struct {
@@ -12,20 +13,23 @@ type TestMetadata struct {
 }
 
 type Plugin struct {
-	plugin         plugin.Plugin
+	plug.ClientActions
+	client         *goplug.Client
 	subCommand     string
 	subCommandFunc func(args []string) error
 }
 
 func New(info goplug.PluginInfo) Plugin {
+	client := &goplug.Client{
+		PluginInfo: info,
+	}
 	return Plugin{
-		plugin: plugin.Plugin{
-			PluginInfo: info,
-		},
+		ClientActions: plug.NewClientActions(client),
+		client:        client,
 	}
 }
 
-// SetSubCommand - for this example support only one subcommand.
+// SetSubCommand - for this example support only one subcommand per client.
 // This is host implementation specific
 func (p *Plugin) SetSubCommand(name string, subCommand func(args []string) error) error {
 	meta := TestMetadata{
@@ -39,13 +43,13 @@ func (p *Plugin) SetSubCommand(name string, subCommand func(args []string) error
 
 	p.subCommandFunc = subCommand
 	p.subCommand = name
-	p.plugin.Metadata = string(metaJson)
+	p.client.Metadata = string(metaJson)
 
 	return nil
 }
 
 func (p *Plugin) Run() {
-	p.plugin.Init()
+	p.client.Init()
 
 	if os.Args[1] == p.subCommand {
 		err := p.subCommandFunc(os.Args[1:])

@@ -1,0 +1,75 @@
+package {{ .Package }}
+
+import (
+	"github.com/aligator/goplug/goplug"
+	{{ range .Imports }}{{ .FakeName }} "{{ .Path }}"
+	{{ end }}
+)
+
+// HostActions contains the host-implementations of actions.
+type HostActions struct {
+	{{ range .References }}{{ .Name }} *{{ .Type }}
+	{{ end }}
+}
+
+type ClientActions struct {
+	client *goplug.Client
+}
+
+func NewClientActions(plugin *goplug.Client) ClientActions {
+	return ClientActions{
+		client: plugin,
+	}
+}
+
+// Make some plugin-methods available to the plugins.
+
+func (c *ClientActions) Print(text string) error {
+	return c.client.Print(text)
+}
+
+// Action implementations for host and client.
+{{ range .Actions }}
+type {{ .Name }}Request struct {
+	{{ range .Request }}{{ .NamePublic }} {{ .Type }} `json:"{{ .Name }}"`
+{{ end }}
+}
+
+type {{ .Name }}Response struct {
+	{{ range .Response }}{{ .NamePublic }} {{ .Type }} `json:"{{ .Name }}"`
+{{ end }}
+}
+
+{{ .Comment }}
+func (h *HostActions) {{ .Name }}(args {{ .Name }}Request, reply *{{ .Name }}Response) error {
+	// Host implementation.
+	{{ if .Response }}{{ range .Response }}{{ .Name }},{{ end }}{{ end }} err := h.{{ .Ref }}.{{ .Name }}({{ if not .Request }}){{ else }}
+		{{ range .Request }}args.{{ .NamePublic }},
+	{{ end }})
+	{{ end }}
+
+	if err != nil {
+		return err
+	}
+	{{ if .Response }}
+	*reply = {{ .Name }}Response{
+		{{ range .Response }}{{ .NamePublic }}: {{ .Name }},
+{{ end }}
+	}
+	{{ end }}
+	return nil
+}
+
+{{ .Comment }}
+func (c *ClientActions) {{ .Name }}({{ if .Request }}
+	{{ range .Request }}{{ .Name }} {{ .Type }},
+{{ end }}{{ end }}) {{ if .Response }}({{ range .Response }}{{ .Name }} {{ .Type }}{{ end }}, err error){{ else }}error{{ end }} {
+	// Calling from the plugin.
+	response := {{ .Name }}Response{}
+	err {{ if not .Response }}:{{ end }}= c.client.Call("{{ .Name }}", {{ .Name }}Request{
+		{{ range .Request }}{{ .NamePublic }}: {{ .Name }},
+{{ end }}
+	}, &response)
+	return {{ if .Response }}{{ range .Response }}response.{{ .NamePublic }}{{ end }}, {{ end }}err
+}
+{{ end }}
