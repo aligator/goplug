@@ -14,9 +14,9 @@ type ClientActions struct {
 	client *goplug.Client
 }
 
-func NewClientActions(client *goplug.Client) ClientActions {
+func NewClientActions(plugin *goplug.Client) ClientActions {
 	return ClientActions{
-		client: client,
+		client: plugin,
 	}
 }
 

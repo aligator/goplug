@@ -1,7 +1,7 @@
 package {{ .Package }}
 
 import (
-	"github.com/aligator/goplug/client"
+	"github.com/aligator/goplug/goplug"
 	{{ range .Imports }}{{ .FakeName }} "{{ .Path }}"
 	{{ end }}
 )
@@ -13,10 +13,10 @@ type HostActions struct {
 }
 
 type ClientActions struct {
-	client *client.Client
+	client *goplug.Client
 }
 
-func NewClientActions(plugin *client.Client) ClientActions {
+func NewClientActions(plugin *goplug.Client) ClientActions {
 	return ClientActions{
 		client: plugin,
 	}
