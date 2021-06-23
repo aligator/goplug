@@ -41,7 +41,7 @@ func main() {
 		PluginFolder: "./example/plugin-bin",
 		Host:         h,
 		Actions: &actions.HostActions{
-			Actions0AppRef: &app,
+			Api0AppRef: &app,
 		},
 	}
 
