@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"os"
 
-	plug "github.com/aligator/goplug/example/host/gen"
+	"github.com/aligator/goplug/example/host/actions"
 	"github.com/aligator/goplug/goplug"
 )
 
@@ -13,7 +13,7 @@ type TestMetadata struct {
 }
 
 type Plugin struct {
-	plug.ClientActions
+	actions.ClientActions
 	client         *goplug.Client
 	subCommand     string
 	subCommandFunc func(args []string) error
@@ -24,7 +24,7 @@ func New(info goplug.PluginInfo) Plugin {
 		PluginInfo: info,
 	}
 	return Plugin{
-		ClientActions: plug.NewClientActions(client),
+		ClientActions: actions.NewClientActions(client),
 		client:        client,
 	}
 }

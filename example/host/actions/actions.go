@@ -1,13 +1,15 @@
-package plug
+package actions
 
 import (
-	actions0 "github.com/aligator/goplug/example/host/api"
 	"github.com/aligator/goplug/goplug"
+	api0 "github.com/aligator/goplug/example/host/api"
+	
 )
 
 // HostActions contains the host-implementations of actions.
 type HostActions struct {
-	Actions0AppRef *actions0.App
+	Api0AppRef *api0.App
+	
 }
 
 type ClientActions struct {
@@ -30,28 +32,32 @@ func (c *ClientActions) Print(text string) error {
 
 type GetRandomIntRequest struct {
 	N int `json:"n"`
+
 }
 
 type GetRandomIntResponse struct {
 	Res int `json:"res"`
+
 }
 
 // GetRandomInt returns, a non-negative pseudo-random number in [0,n) from the
 // default Source. Returns an error if n <= 0.
 func (h *HostActions) GetRandomInt(args GetRandomIntRequest, reply *GetRandomIntResponse) error {
 	// Host implementation.
-	res, err := h.Actions0AppRef.GetRandomInt(
+	res, err := h.Api0AppRef.GetRandomInt(
 		args.N,
 	)
+	
 
 	if err != nil {
 		return err
 	}
-
+	
 	*reply = GetRandomIntResponse{
 		Res: res,
-	}
 
+	}
+	
 	return nil
 }
 
@@ -64,25 +70,28 @@ func (c *ClientActions) GetRandomInt(
 	response := GetRandomIntResponse{}
 	err = c.client.Call("GetRandomInt", GetRandomIntRequest{
 		N: n,
+
 	}, &response)
 	return response.Res, err
 }
 
 type PrintHelloRequest struct {
+	
 }
 
 type PrintHelloResponse struct {
+	
 }
 
 // PrintHello to stdout.
 func (h *HostActions) PrintHello(args PrintHelloRequest, reply *PrintHelloResponse) error {
 	// Host implementation.
-	err := h.Actions0AppRef.PrintHello()
+	 err := h.Api0AppRef.PrintHello()
 
 	if err != nil {
 		return err
 	}
-
+	
 	return nil
 }
 
@@ -90,6 +99,8 @@ func (h *HostActions) PrintHello(args PrintHelloRequest, reply *PrintHelloRespon
 func (c *ClientActions) PrintHello() error {
 	// Calling from the plugin.
 	response := PrintHelloResponse{}
-	err := c.client.Call("PrintHello", PrintHelloRequest{}, &response)
+	err := c.client.Call("PrintHello", PrintHelloRequest{
+		
+	}, &response)
 	return err
 }

@@ -7,8 +7,9 @@ import (
 	"os"
 	"time"
 
-	actions "github.com/aligator/goplug/example/host/api"
-	plug "github.com/aligator/goplug/example/host/gen"
+	"github.com/aligator/goplug/example/host/actions"
+	"github.com/aligator/goplug/example/host/api"
+
 	"github.com/aligator/goplug/example/host/plugin"
 	"github.com/aligator/goplug/goplug"
 )
@@ -34,12 +35,12 @@ func main() {
 	h := new(TestHost)
 	h.commands = make(map[string]goplug.OnOneShot)
 
-	app := actions.App{}
+	app := api.App{}
 
 	g := goplug.GoPlug{
 		PluginFolder: "./example/plugin-bin",
 		Host:         h,
-		Actions: &plug.HostActions{
+		Actions: &actions.HostActions{
 			Actions0AppRef: &app,
 		},
 	}
