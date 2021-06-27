@@ -7,6 +7,7 @@ import (
 	"github.com/aligator/checkpoint"
 	"github.com/spf13/afero"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"golang.org/x/tools/go/packages"
@@ -527,13 +528,13 @@ func (g Generator) Write() error {
 	}
 
 	// Format it.
-	//formatted, err := format.Source(buf.Bytes())
-	//if err != nil {
-	//	return checkpoint.From(err)
-	//}
+	formatted, err := format.Source(buf.Bytes())
+	if err != nil {
+		return checkpoint.From(err)
+	}
 
 	// And save it.
-	_, err = f.Write(buf.Bytes())
+	_, err = f.Write(formatted)
 	if err != nil {
 		return checkpoint.From(err)
 	}
