@@ -306,26 +306,6 @@ func (g *Generator) mapParamType(expr ast.Expr, actionMatch match, packageName s
 			}
 
 			resultType = "*" + targetType
-
-			//// Todo: this part may need rework...
-			//switch target := v.X.(type) {
-			//case *ast.Ident:
-			//	resultType = target.Name
-			//	if target.Obj != nil {
-			//		// It is a object, not a standard type (like int, string, ...)
-			//		resultType = packageName + "." + resultType
-			//	}
-			//	// It is a reference to another type.
-			//	resultType = "*" + resultType
-			//case *ast.SelectorExpr:
-			//	// It is a reference to another type from another package.
-			//	fakeName, err := g.addImport(target.X.(*ast.Ident).Name, actionMatch.imports)
-			//	if err != nil {
-			//		return "", checkpoint.From(err)
-			//	}
-			//	resultType = "*" + fakeName + "." + target.Sel.Name
-			//}
-
 		case *ast.SelectorExpr:
 			// It is a reference to another type from another package.
 			fakeName, err := g.addImport(v.X.(*ast.Ident).Name, actionMatch.imports)
@@ -338,14 +318,17 @@ func (g *Generator) mapParamType(expr ast.Expr, actionMatch match, packageName s
 				return "", checkpoint.From(err)
 			}
 			resultType = refType
+		case *ast.ArrayType:
+			if !g.AllowSlices {
+				return "", checkpoint.Wrap(errors.New("slices are not allowed"), ErrTypeNotSupported)
+			}
 
-			//// It is a reference to another type from another package.
-			//fakeName, err := g.addImport(v.X.(*ast.Ident).Name, actionMatch.imports)
-			//if err != nil {
-			//	return "", checkpoint.From(err)
-			//}
-			//resultType = fakeName + "." + v.Sel.Name
+			targetType, err := mapper(v.Elt, actionMatch, packageName, isExternal)
+			if err != nil {
+				return "", err
+			}
 
+			resultType = "[]" + targetType
 		default:
 			return "", checkpoint.From(ErrTypeNotSupported)
 		}

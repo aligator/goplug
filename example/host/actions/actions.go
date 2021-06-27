@@ -274,3 +274,39 @@ func (c *ClientActions) WithPointerToStructFromPackage(
 	}, &response)
 	return response.Res0, err
 }
+
+type WithSliceToStructFromPackageRequest struct {
+	Val []apackage0.AStruct `json:"val"`
+}
+
+type WithSliceToStructFromPackageResponse struct {
+	Res0 []apackage0.AStruct `json:"res0"`
+}
+
+func (h *HostActions) WithSliceToStructFromPackage(args WithSliceToStructFromPackageRequest, reply *WithSliceToStructFromPackageResponse) error {
+	// Host implementation.
+	res0, err := h.Api0AppRef.WithSliceToStructFromPackage(
+		args.Val,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	*reply = WithSliceToStructFromPackageResponse{
+		Res0: res0,
+	}
+
+	return nil
+}
+
+func (c *ClientActions) WithSliceToStructFromPackage(
+	val []apackage0.AStruct,
+) (res0 []apackage0.AStruct, err error) {
+	// Calling from the plugin.
+	response := WithSliceToStructFromPackageResponse{}
+	err = c.client.Call("WithSliceToStructFromPackage", WithSliceToStructFromPackageRequest{
+		Val: val,
+	}, &response)
+	return response.Res0, err
+}

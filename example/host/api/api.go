@@ -71,3 +71,8 @@ func (a App) WithStructFromPackage(val apackage.AStruct) (apackage.AStruct, erro
 func (a App) WithPointerToStructFromPackage(val *apackage.AStruct) (*apackage.AStruct, error) {
 	panic("not implemented")
 }
+
+//goplug:generate
+func (a App) WithSliceToStructFromPackage(val []apackage.AStruct) ([]apackage.AStruct, error) {
+	panic("not implemented")
+}
