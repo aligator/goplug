@@ -4,19 +4,22 @@ import (
 	"bytes"
 	"embed"
 	"errors"
+	"github.com/aligator/checkpoint"
+	"github.com/spf13/afero"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"golang.org/x/tools/go/packages"
 	"io/fs"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"text/template"
+)
 
-	"github.com/aligator/checkpoint"
-	"github.com/spf13/afero"
-	"golang.org/x/tools/go/packages"
+var (
+	ErrTypeNotSupported = errors.New("type not supported (some types can be activated by GoPlug options)")
 )
 
 type match struct {
@@ -29,6 +32,24 @@ type match struct {
 	imports  []Import
 }
 
+type atomicInt32 struct {
+	internal *int32
+}
+
+func (a atomicInt32) Add(delta int32) {
+	if a.internal == nil {
+		a.internal = new(int32)
+	}
+	atomic.AddInt32(a.internal, delta)
+}
+
+func (a atomicInt32) Load() int32 {
+	if a.internal == nil {
+		a.internal = new(int32)
+	}
+	return atomic.LoadInt32(a.internal)
+}
+
 type Generator struct {
 	Out    string
 	In     string
@@ -36,8 +57,36 @@ type Generator struct {
 	Pack   string
 	FS     afero.Fs
 
-	found     []match
-	generated *PluginData
+	// AllowStructs enables the plugin-methods to use other
+	// structs as param or return type.
+	// Be aware that the plugins will need to import these structs and therefore
+	// have the host as direct dependency.
+	// So be careful what methods these structs include. All plugins will have
+	// access to them. However only public fields will be sent.
+	//
+	// To have a strict decoupling of plugins from the host-types and
+	// to avoid possible confusion for plugin-developers this
+	// option should be false.
+	AllowStructs bool
+
+	// AllowPointers enables the plugin-methods to use pointers.
+	// Be aware that these pointers are in fact get still copied as
+	// they get serialized and de-serialized fully.
+	// To avoid confusion for plugin-developers this option should
+	// be false.
+	AllowPointers bool
+
+	// AllowSlices enables the plugin-methods to use slices.
+	// Be aware that these slices are always copied
+	AllowSlices bool
+
+	found        []match
+	generated    *PluginData
+	finalImports map[string]Import
+
+	// importCounter just counts the imports added in order to generate
+	// unique imports in any case by just appending this number.
+	importCounter atomicInt32
 }
 
 // CleanDestination removes the whole destination folder (if it exists)
@@ -227,64 +276,141 @@ type PluginData struct {
 	Actions    []Action
 }
 
+func (g *Generator) mapParamType(expr ast.Expr, actionMatch match, packageName string) (string, error) {
+	// Use an internal mapper function to add the isExternal flag.
+	var mapper func(expr ast.Expr, actionMatch match, packageName string, isExternal bool) (string, error)
+	mapper = func(expr ast.Expr, actionMatch match, packageName string, isExternal bool) (string, error) {
+		var resultType string
+
+		switch v := expr.(type) {
+		case *ast.Ident:
+			resultType = v.Name
+			if v.Obj == nil && !isExternal {
+				return resultType, nil
+			}
+
+			resultType = packageName + "." + resultType
+
+			// It is a object, e.g. a struct
+			if !g.AllowStructs {
+				return "", checkpoint.Wrap(errors.New("structs are not allowed"), ErrTypeNotSupported)
+			}
+		case *ast.StarExpr:
+			if !g.AllowPointers {
+				return "", checkpoint.Wrap(errors.New("pointers are not allowed"), ErrTypeNotSupported)
+			}
+
+			targetType, err := mapper(v.X, actionMatch, packageName, isExternal)
+			if err != nil {
+				return "", err
+			}
+
+			resultType = "*" + targetType
+
+			//// Todo: this part may need rework...
+			//switch target := v.X.(type) {
+			//case *ast.Ident:
+			//	resultType = target.Name
+			//	if target.Obj != nil {
+			//		// It is a object, not a standard type (like int, string, ...)
+			//		resultType = packageName + "." + resultType
+			//	}
+			//	// It is a reference to another type.
+			//	resultType = "*" + resultType
+			//case *ast.SelectorExpr:
+			//	// It is a reference to another type from another package.
+			//	fakeName, err := g.addImport(target.X.(*ast.Ident).Name, actionMatch.imports)
+			//	if err != nil {
+			//		return "", checkpoint.From(err)
+			//	}
+			//	resultType = "*" + fakeName + "." + target.Sel.Name
+			//}
+
+		case *ast.SelectorExpr:
+			// It is a reference to another type from another package.
+			fakeName, err := g.addImport(v.X.(*ast.Ident).Name, actionMatch.imports)
+			if err != nil {
+				return "", checkpoint.From(err)
+			}
+
+			refType, err := mapper(v.Sel, actionMatch, fakeName, true)
+			if err != nil {
+				return "", checkpoint.From(err)
+			}
+			resultType = refType
+
+			//// It is a reference to another type from another package.
+			//fakeName, err := g.addImport(v.X.(*ast.Ident).Name, actionMatch.imports)
+			//if err != nil {
+			//	return "", checkpoint.From(err)
+			//}
+			//resultType = fakeName + "." + v.Sel.Name
+
+		default:
+			return "", checkpoint.From(ErrTypeNotSupported)
+		}
+
+		return resultType, nil
+	}
+
+	return mapper(expr, actionMatch, packageName, false)
+}
+
+// addImport adds the given name or path to the imports.
+// If fileImports is given it is used to resolve it.
+// If nameOrPath is a name the fileImports are mandatory, to resolve it.
+func (g *Generator) addImport(nameOrPath string, fileImports []Import) (string, error) {
+	// First get the path behind it if possible.
+	var match Import
+	if fileImports != nil {
+		for _, i := range fileImports {
+			if i.FakeName == nameOrPath || i.Name == nameOrPath || strings.HasSuffix(i.Path, nameOrPath) || i.Path == nameOrPath {
+				match = i
+				// If the file is valid go, there can only be one exact match.
+				break
+			}
+		}
+	} else {
+		// In this case it must be a path.
+		match = Import{
+			FakeName: "",
+			Name:     filepath.Base(nameOrPath),
+			Path:     nameOrPath,
+		}
+	}
+
+	if match == (Import{}) {
+		return "", errors.New("could not find the import")
+	}
+
+	// Check if it is already set.
+	if i, ok := g.finalImports[match.Path]; !ok {
+		fakeName := match.Name
+		// Make sure it is unique.
+		count := g.importCounter.Load()
+		fakeName += strconv.Itoa(int(count))
+		g.importCounter.Add(1)
+
+		// If not, create it.
+		g.finalImports[match.Path] = Import{
+			FakeName: fakeName,
+			Name:     match.Name,
+			Path:     match.Path,
+		}
+
+		return g.finalImports[match.Path].FakeName, nil
+	} else {
+		return i.FakeName, nil
+	}
+}
+
 // Generate the plugin actions file
 func (g *Generator) Generate() error {
 	g.generated = &PluginData{
 		Package: g.Pack,
 	}
 
-	// importCounter just counts the imports added to generate in any case
-	// unique imports by just appending this number.
-	var importCounter int32 = 0
-
-	imports := make(map[string]Import)
-	// addImport adds the given name or path to the imports.
-	// If fileImports is given it is used to resolve it.
-	// If nameOrPath is a name the fileImports are mandatory, to resolve it.
-	addImport := func(nameOrPath string, fileImports []Import) (string, error) {
-		// First get the path behind it if possible.
-		var match Import
-		if fileImports != nil {
-			for _, i := range fileImports {
-				if i.FakeName == nameOrPath || i.Name == nameOrPath || strings.HasSuffix(i.Path, nameOrPath) || i.Path == nameOrPath {
-					match = i
-					// If the file is valid go, there can only be one exact match.
-					break
-				}
-			}
-		} else {
-			// In this case it must be a path.
-			match = Import{
-				FakeName: "",
-				Name:     filepath.Base(nameOrPath),
-				Path:     nameOrPath,
-			}
-		}
-
-		if match == (Import{}) {
-			return "", errors.New("could not find the import")
-		}
-
-		// Check if it is already set.
-		if i, ok := imports[match.Path]; !ok {
-			fakeName := match.Name
-			// Make sure it is unique.
-			count := atomic.LoadInt32(&importCounter)
-			fakeName += strconv.Itoa(int(count))
-			atomic.AddInt32(&importCounter, 1)
-
-			// If not, create it.
-			imports[match.Path] = Import{
-				FakeName: fakeName,
-				Name:     match.Name,
-				Path:     match.Path,
-			}
-
-			return imports[match.Path].FakeName, nil
-		} else {
-			return i.FakeName, nil
-		}
-	}
+	g.finalImports = make(map[string]Import)
 
 	// Add references
 	for _, action := range g.found {
@@ -305,7 +431,7 @@ func (g *Generator) Generate() error {
 		}
 
 		importPath := filepath.ToSlash(filepath.Join(g.Import, action.path))
-		fakeName, err := addImport(importPath, []Import{
+		fakeName, err := g.addImport(importPath, []Import{
 			{
 				FakeName: "",
 				Name:     action.pack.Name,
@@ -343,45 +469,9 @@ func (g *Generator) Generate() error {
 
 		// Add parameters.
 		for _, param := range action.fn.Type.Params.List {
-			var paramType string
-
-			switch v := param.Type.(type) {
-			case *ast.Ident:
-				paramType = v.Name
-				if v.Obj != nil {
-					// It is a object, not a standard type (like int, string, ...)
-					paramType = fakeName + "." + paramType
-				}
-			case *ast.StarExpr:
-				// Todo: this part may need rework...
-				switch target := v.X.(type) {
-				case *ast.Ident:
-					paramType = target.Name
-					if target.Obj != nil {
-						// It is a object, not a standard type (like int, string, ...)
-						paramType = fakeName + "." + paramType
-					}
-					// It is a reference to another type.
-					paramType = "*" + paramType
-				case *ast.SelectorExpr:
-					// It is a reference to another type from another package.
-					fakeName, err := addImport(target.X.(*ast.Ident).Name, action.imports)
-					if err != nil {
-						return checkpoint.From(err)
-					}
-					paramType = "*" + fakeName + "." + target.Sel.Name
-				}
-
-			case *ast.SelectorExpr:
-				// It is a reference to another type.
-				fakeName, err := addImport(v.X.(*ast.Ident).Name, action.imports)
-				if err != nil {
-					return checkpoint.From(err)
-				}
-				paramType = fakeName + "." + v.Sel.Name
-
-			default:
-				return checkpoint.From(errors.New("param type not supported"))
+			paramType, err := g.mapParamType(param.Type, action, fakeName)
+			if err != nil {
+				return err
 			}
 
 			actionData.Request = append(actionData.Request, Param{
@@ -393,7 +483,6 @@ func (g *Generator) Generate() error {
 		}
 
 		// Add response.
-		// TODO: remove code duplication with for above
 		for i, res := range action.fn.Type.Results.List {
 			if i == len(action.fn.Type.Results.List)-1 {
 				// As the last return type has to be an error and that
@@ -402,44 +491,9 @@ func (g *Generator) Generate() error {
 				break
 			}
 
-			var resType string
-
-			switch v := res.Type.(type) {
-			case *ast.Ident:
-				resType = v.Name
-				if v.Obj != nil {
-					// It is a object, not a standard type (like int, string, ...)
-					resType = fakeName + "." + resType
-				}
-			case *ast.StarExpr:
-				switch target := v.X.(type) {
-				case *ast.Ident:
-					resType = target.Name
-					if target.Obj != nil {
-						// It is a object, not a standard type (like int, string, ...)
-						resType = fakeName + "." + resType
-					}
-					// It is a reference to another type.
-					resType = "*" + resType
-				case *ast.SelectorExpr:
-					// It is a reference to another type from another package.
-					fakeName, err := addImport(target.X.(*ast.Ident).Name, action.imports)
-					if err != nil {
-						return checkpoint.From(err)
-					}
-					resType = "*" + fakeName + "." + target.Sel.Name
-				}
-
-			case *ast.SelectorExpr:
-				// It is a reference to another type from another package.
-				fakeName, err := addImport(v.X.(*ast.Ident).Name, action.imports)
-				if err != nil {
-					return checkpoint.From(err)
-				}
-				resType = fakeName + "." + v.Sel.Name
-
-			default:
-				return checkpoint.From(errors.New("res type not supported"))
+			resType, err := g.mapParamType(res.Type, action, fakeName)
+			if err != nil {
+				return err
 			}
 
 			name := ""
@@ -454,13 +508,12 @@ func (g *Generator) Generate() error {
 				NamePublic: strings.ToUpper(string(name[0])) + name[1:],
 				Type:       resType,
 			})
-
 		}
 
 		g.generated.Actions = append(g.generated.Actions, actionData)
 	}
 
-	for _, imp := range imports {
+	for _, imp := range g.finalImports {
 		g.generated.Imports = append(g.generated.Imports, imp)
 	}
 

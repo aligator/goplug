@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"github.com/aligator/goplug/example/host/api/a_package"
 	"math/rand"
 	"strconv"
 	"time"
@@ -40,4 +41,33 @@ func (a *App) PrintHello() error {
 	fmt.Println("Hellooooooo", strconv.Itoa(a.lastHello))
 	a.lastHello++
 	return nil
+}
+
+//goplug:generate
+func (a App) WithPointer(val *int) (*int, error) {
+	panic("not implemented")
+}
+
+type AStruct struct {
+	Value int
+}
+
+//goplug:generate
+func (a App) WithStruct(val AStruct) (AStruct, error) {
+	panic("not implemented")
+}
+
+//goplug:generate
+func (a App) WithPointerToStruct(val *AStruct) (*AStruct, error) {
+	panic("not implemented")
+}
+
+//goplug:generate
+func (a App) WithStructFromPackage(val apackage.AStruct) (apackage.AStruct, error) {
+	panic("not implemented")
+}
+
+//goplug:generate
+func (a App) WithPointerToStructFromPackage(val *apackage.AStruct) (*apackage.AStruct, error) {
+	panic("not implemented")
 }

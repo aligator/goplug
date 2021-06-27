@@ -1,4 +1,4 @@
-//go:generate go run . -o actions -m github.com/aligator/goplug/example/host ./example/host
+//go:generate go run . -o actions -m github.com/aligator/goplug/example/host -allow-structs ./example/host
 //go:generate go build -o ./example/plugin-bin  ./example/plugin
 //go:generate go build -o ./example/plugin-bin  ./example/plugin2
 
@@ -7,16 +7,18 @@ package main
 import (
 	"flag"
 	"fmt"
-	"path/filepath"
-
 	"github.com/aligator/goplug/generate"
 	"github.com/spf13/afero"
+	"path/filepath"
 )
 
 func main() {
 	out := flag.String("o", "plug", "sub-folder of the project to generate the new code into")
 	importPath := flag.String("m", "", "module path to use if it should not be the module path from the go.mod file")
 	pack := flag.String("p", "", "package name if not the same as the given output folder")
+	allowStructs := flag.Bool("allow-structs", false, "")
+	allowPointers := flag.Bool("allow-pointers", false, "")
+	allowSlices := flag.Bool("allow-slices", false, "")
 
 	flag.Parse()
 	args := flag.Args()
@@ -32,6 +34,10 @@ func main() {
 		Import: *importPath,
 		FS:     afero.NewOsFs(),
 		Pack:   *pack,
+
+		AllowStructs:  *allowStructs,
+		AllowPointers: *allowPointers,
+		AllowSlices:   *allowSlices,
 	}
 
 	fmt.Printf("Clean target directory %v\n", g.Out)
