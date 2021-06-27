@@ -54,7 +54,7 @@ func (a atomicInt32) Load() int32 {
 type Generator struct {
 	Out    string
 	In     string
-	Import string
+	Module string
 	Pack   string
 	FS     afero.Fs
 
@@ -78,7 +78,7 @@ type Generator struct {
 	AllowPointers bool
 
 	// AllowSlices enables the plugin-methods to use slices.
-	// Be aware that these slices are always copied
+	// Be aware that these slices are always copied.
 	AllowSlices bool
 
 	found        []match
@@ -214,8 +214,8 @@ func (g *Generator) Search() error {
 			// Read the module path (if it is not set explicitly).
 			// That is needed to compose the import paths correctly.
 			// This is only done once.
-			if g.Import == "" {
-				g.Import = pkg.Module.Path
+			if g.Module == "" {
+				g.Module = pkg.Module.Path
 			}
 
 			for _, imp := range pkg.Imports {
@@ -414,7 +414,7 @@ func (g *Generator) Generate() error {
 			return checkpoint.From(errors.New("receiver type not supported"))
 		}
 
-		importPath := filepath.ToSlash(filepath.Join(g.Import, action.path))
+		importPath := filepath.ToSlash(filepath.Join(g.Module, action.path))
 		fakeName, err := g.addImport(importPath, []Import{
 			{
 				FakeName: "",
